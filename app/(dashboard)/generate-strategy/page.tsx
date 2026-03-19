@@ -67,15 +67,15 @@ export default function GenerateStrategyPage() {
         .replace('{target_score}', profile.target_score)
         .replace('{daily_study_time}', profile.daily_study_time)
 
-      // 调用 AI API
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      // 调用 AI API (SiliconFlow)
+      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'deepseek-ai/DeepSeek-V3.2',
           messages: [
             { role: 'system', content: '你是一个专业的英语学习策略规划师。请严格按照用户要求输出 JSON 格式。' },
             { role: 'user', content: prompt }
@@ -145,9 +145,9 @@ export default function GenerateStrategyPage() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="sk-..."
+                  placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 />
-                <p className="mt-1 text-xs text-gray-500">你的 API Key 仅保存在本地浏览器中，不会上传到服务器</p>
+                <p className="mt-1 text-xs text-gray-500">请输入硅基流动 (SiliconFlow) 的 API Key，使用 DeepSeek-V3.2 模型</p>
               </div>
 
               {message && (
