@@ -12,10 +12,16 @@ const taskTypes = [
   { value: 'review', label: '复习巩固' },
 ]
 
+// 内置 API 配置
+const API_CONFIG = {
+  endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
+  apiKey: 'sk-zuokmjfwyhweoxhqwuszsiiixeqyfxmxatcvagjjtiacsblc',
+  model: 'deepseek-ai/DeepSeek-V3.2',
+}
+
 export default function GenerateDailyPage() {
   const [profile, setProfile] = useState<any>(null)
   const [strategy, setStrategy] = useState<any>(null)
-  const [apiKey, setApiKey] = useState('')
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['reading', 'vocabulary'])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -46,10 +52,6 @@ export default function GenerateDailyPage() {
   }
 
   const generateTasks = async () => {
-    if (!apiKey) {
-      setMessage('请输入 AI API Key')
-      return
-    }
     if (!profile || !strategy) {
       setMessage('请先完善学习档案并生成策略')
       return
@@ -89,14 +91,14 @@ export default function GenerateDailyPage() {
   }
 ]`
 
-      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+      const response = await fetch(API_CONFIG.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${API_CONFIG.apiKey}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-ai/DeepSeek-V3.2',
+          model: API_CONFIG.model,
           messages: [
             { role: 'system', content: '你是一个专业的英语学习任务规划师。请严格按照用户要求输出 JSON 格式。' },
             { role: 'user', content: prompt }
@@ -106,7 +108,8 @@ export default function GenerateDailyPage() {
       })
 
       if (!response.ok) {
-        throw new Error('API 调用失败')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`API 调用失败: ${errorData.error?.message || response.statusText}`)
       }
 
       const data = await response.json()
@@ -130,8 +133,8 @@ export default function GenerateDailyPage() {
       }
 
       router.push('/')
-    } catch (err) {
-      setMessage('生成任务失败，请检查 API Key 是否正确')
+    } catch (err: any) {
+      setMessage('生成任务失败: ' + (err.message || '请稍后重试'))
     } finally {
       setLoading(false)
     }
@@ -151,19 +154,26 @@ export default function GenerateDailyPage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-4">生成今日任务</h1>
         
         <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              AI API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-            />
-            <p className="mt-1 text-xs text-gray-500">请输入硅基流动 (SiliconFlow) 的 API Key</p>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <span className="font-medium">AI 模型:</span> {API_CONFIG.model}
+            </p>
+            <p className="text-sm text-blue-800">
+              <span className="font-medium">服务提供商:</span> 硅基流动 (SiliconFlow)
+            </p>
           </div>
+
+          {!profile && (
+            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+              请先<a href="/onboarding" className="underline font-medium">完善学习档案</a>
+            </div>
+          )}
+
+          {!strategy && (
+            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+              请先<a href="/generate-strategy" className="underline font-medium">生成学习策略</a>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -197,7 +207,7 @@ export default function GenerateDailyPage() {
 
           <button
             onClick={generateTasks}
-            disabled={loading || selectedTypes.length === 0}
+            disabled={loading || selectedTypes.length === 0 || !profile || !strategy}
             className="w-full py-4 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? 'AI 正在生成任务...' : `生成 ${selectedTypes.length} 个任务`}
