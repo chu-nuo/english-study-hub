@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 
 const taskTypes = [
   { value: 'reading', label: '阅读理解' },
@@ -17,6 +16,12 @@ const API_CONFIG = {
   endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
   apiKey: 'sk-zuokmjfwyhweoxhqwuszsiiixeqyfxmxatcvagjjtiacsblc',
   model: 'deepseek-ai/DeepSeek-V3.2',
+}
+
+// MiniMax TTS API 配置
+const TTS_CONFIG = {
+  endpoint: 'https://api.minimax.chat/v1/t2a_v2',
+  apiKey: '', // 需要填入 MiniMax API Key
 }
 
 export default function GenerateDailyPage() {
@@ -67,11 +72,11 @@ export default function GenerateDailyPage() {
 
       // 根据任务类型生成更具体的内容
       const taskTypePrompts: Record<string, string> = {
-        reading: '阅读理解：提供一篇雅思/托福/四六级阅读文章的标题、来源、字数，以及3-5道选择题让学生练习',
-        listening: '听力训练：提供一个听力练习场景，包含音频类型（对话/讲座/新闻）、时长，以及听力题目',
-        writing: '写作练习：给出一个写作题目，包含题目描述、字数要求、参考范文开头或写作思路',
-        vocabulary: '词汇学习：列出10-15个今日应学习的重点词汇，包含单词、音标、词性、中文释义、例句',
-        review: '复习巩固：设计复习内容，包含之前学过的重点知识点回顾、错题整理方法',
+        reading: '阅读理解：提供一篇雅思/托福/四六级阅读文章的标题、来源、字数，以及3-5道选择题让学生练习。题目必须包含：文章正文内容、每道题目的选项和正确答案。',
+        listening: '听力训练：提供一个完整的听力练习场景。必须包含：听力音频文本（用【听力文本】标注）、3-5道听力题目（选择题）和正确答案。',
+        writing: '写作练习：给出一个写作题目，包含题目描述、字数要求、参考范文或写作思路。',
+        vocabulary: '词汇学习：列出10-15个今日应学习的重点词汇，每个词必须包含：单词、音标、词性、中文释义、一个例句。',
+        review: '复习巩固：设计复习内容，包含之前学过的重点知识点回顾、错题整理方法。',
       }
 
       const selectedTaskTypes = selectedTypes.map(t => taskTypePrompts[t] || taskTypePrompts.reading).join('\n\n')
@@ -90,19 +95,21 @@ export default function GenerateDailyPage() {
 ${selectedTaskTypes}
 
 【重要】每个任务必须包含：
-1. title - 具体可执行的任务标题（如："完成一篇雅思阅读真题"）
+1. title - 具体可执行的任务标题
 2. description - 具体的任务描述，包含题目或内容
 3. duration - 预计完成时间（分钟）
 4. steps - 具体的执行步骤（3-5步）
+5. audio_text - 【仅听力任务】包含完整的听力原文文本（用于后续生成音频），其他任务留空
 
-【输出格式】必须是合法的JSON数组，每个任务对象必须包含title、description、duration、steps四个字段。
+【输出格式】必须是合法的JSON数组。
 例如：
 [
   {
     "title": "完成剑雅真题第X篇阅读",
     "description": "阅读文章并完成题目...",
     "duration": 30,
-    "steps": ["先阅读题目", "快速浏览文章", "定位关键词", "答题", "核对答案"]
+    "steps": ["先阅读题目", "快速浏览文章", "定位关键词", "答题", "核对答案"],
+    "audio_text": ""
   }
 ]`
 
@@ -144,6 +151,7 @@ ${selectedTaskTypes}
           task_date: today,
           task_type: selectedTypes[i] || 'reading',
           content: tasks[i],
+          audio_text: tasks[i].audio_text || null,
         })
       }
 
@@ -164,34 +172,34 @@ ${selectedTaskTypes}
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-lg mx-auto bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">生成今日任务</h1>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-lg mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">生成今日任务</h1>
         
         <div className="space-y-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-800">
+          <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
               <span className="font-medium">AI 模型:</span> {API_CONFIG.model}
             </p>
-            <p className="text-sm text-blue-800">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
               <span className="font-medium">服务提供商:</span> 硅基流动 (SiliconFlow)
             </p>
           </div>
 
           {!profile && (
-            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+            <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg">
               请先<a href="/onboarding" className="underline font-medium">完善学习档案</a>
             </div>
           )}
 
           {!strategy && (
-            <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+            <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg">
               请先<a href="/generate-strategy" className="underline font-medium">生成学习策略</a>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
               选择今日任务类型
             </label>
             <div className="space-y-2">
@@ -200,8 +208,8 @@ ${selectedTaskTypes}
                   key={type.value}
                   className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
                     selectedTypes.includes(type.value)
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
                   }`}
                 >
                   <input
@@ -210,20 +218,20 @@ ${selectedTaskTypes}
                     onChange={() => toggleTaskType(type.value)}
                     className="w-4 h-4 text-blue-600 rounded"
                   />
-                  <span className="ml-3">{type.label}</span>
+                  <span className="ml-3 text-gray-900 dark:text-gray-100">{type.label}</span>
                 </label>
               ))}
             </div>
           </div>
 
           {message && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{message}</div>
+            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">{message}</div>
           )}
 
           <button
             onClick={generateTasks}
             disabled={loading || selectedTypes.length === 0 || !profile || !strategy}
-            className="w-full py-4 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="w-full py-4 px-6 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50"
           >
             {loading ? 'AI 正在生成任务...' : `生成 ${selectedTypes.length} 个任务`}
           </button>
@@ -232,3 +240,6 @@ ${selectedTaskTypes}
     </div>
   )
 }
+
+// 添加 useRouter import
+import { useRouter } from 'next/navigation'
