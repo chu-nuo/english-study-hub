@@ -16,13 +16,20 @@ interface StrategyData {
   adaptive_rules: string
 }
 
+// 内置 API 配置
+const API_CONFIG = {
+  endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
+  apiKey: 'sk-zuokmjfwyhweoxhqwuszsiiixeqyfxmxatcvagjjtiacsblc',
+  model: 'deepseek-ai/DeepSeek-V3.2',
+}
+
 export default function GenerateStrategyPage() {
   const [profile, setProfile] = useState<any>(null)
-  const [apiKey, setApiKey] = useState('')
   const [strategy, setStrategy] = useState<StrategyData | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [debugInfo, setDebugInfo] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -43,10 +50,6 @@ export default function GenerateStrategyPage() {
   }
 
   const generateStrategy = async () => {
-    if (!apiKey) {
-      setMessage('请输入 AI API Key')
-      return
-    }
     if (!profile) {
       setMessage('请先完善学习档案')
       return
@@ -54,6 +57,7 @@ export default function GenerateStrategyPage() {
 
     setLoading(true)
     setMessage('')
+    setDebugInfo('')
 
     try {
       // 读取 prompt 模板
@@ -68,14 +72,14 @@ export default function GenerateStrategyPage() {
         .replace('{daily_study_time}', profile.daily_study_time)
 
       // 调用 AI API (SiliconFlow)
-      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+      const response = await fetch(API_CONFIG.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${API_CONFIG.apiKey}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-ai/DeepSeek-V3.2',
+          model: API_CONFIG.model,
           messages: [
             { role: 'system', content: '你是一个专业的英语学习策略规划师。请严格按照用户要求输出 JSON 格式。' },
             { role: 'user', content: prompt }
@@ -85,7 +89,10 @@ export default function GenerateStrategyPage() {
       })
 
       if (!response.ok) {
-        throw new Error('API 调用失败')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('API Error:', response.status, errorData)
+        setDebugInfo(JSON.stringify({ status: response.status, error: errorData }, null, 2))
+        throw new Error(`API 调用失败: ${response.status} - ${errorData.error?.message || errorData.message || '未知错误'}`)
       }
 
       const data = await response.json()
@@ -97,8 +104,9 @@ export default function GenerateStrategyPage() {
       
       const parsedStrategy = JSON.parse(jsonStr)
       setStrategy(parsedStrategy)
-    } catch (err) {
-      setMessage('生成策略失败，请检查 API Key 是否正确')
+    } catch (err: any) {
+      console.error('Generate strategy error:', err)
+      setMessage('生成策略失败: ' + (err.message || '请检查 API Key 是否正确'))
     } finally {
       setLoading(false)
     }
@@ -136,22 +144,26 @@ export default function GenerateStrategyPage() {
           
           {!strategy ? (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  AI API Key
-                </label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                />
-                <p className="mt-1 text-xs text-gray-500">请输入硅基流动 (SiliconFlow) 的 API Key，使用 DeepSeek-V3.2 模型</p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">AI 模型:</span> {API_CONFIG.model}
+                </p>
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">服务提供商:</span> 硅基流动 (SiliconFlow)
+                </p>
               </div>
 
               {message && (
-                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{message}</div>
+                <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                  {message}
+                </div>
+              )}
+
+              {debugInfo && (
+                <div className="text-xs text-gray-600 bg-gray-100 p-3 rounded-lg overflow-auto max-h-40">
+                  <p className="font-medium mb-1">调试信息:</p>
+                  <pre>{debugInfo}</pre>
+                </div>
               )}
 
               <button
