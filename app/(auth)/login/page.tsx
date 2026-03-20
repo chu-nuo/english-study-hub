@@ -39,12 +39,28 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          confirm_email: false
+        }
+      }
     })
 
     if (error) {
       setMessage(error.message)
     } else {
-      setMessage('注册成功！请检查邮箱验证链接。')
+      // 注册成功，直接登录
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      
+      if (loginError) {
+        setMessage('注册成功！请登录。')
+      } else {
+        router.push('/')
+        router.refresh()
+      }
     }
     setLoading(false)
   }
