@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 const taskTypes = [
@@ -16,6 +16,75 @@ const API_CONFIG = {
   endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
   apiKey: 'sk-zuokmjfwyhweoxhqwuszsiiixeqyfxmxatcvagjjtiacsblc',
   model: 'deepseek-ai/DeepSeek-V3.2',
+}
+
+// 简单的任务标题模板
+const taskTemplates = {
+  reading: {
+    title: '阅读理解练习',
+    description: '完成一篇阅读理解练习',
+    content: '阅读以下文章并回答问题',
+    duration: 25,
+  },
+  listening: {
+    title: '听力练习',
+    description: '完成一段听力练习',
+    content: '听录音并回答问题',
+    duration: 20,
+  },
+  writing: {
+    title: '写作练习',
+    description: '完成一篇写作练习',
+    content: '根据题目要求完成写作',
+    duration: 30,
+  },
+  vocabulary: {
+    title: '词汇学习',
+    description: '学习今日重点词汇',
+    content: '学习以下重点词汇',
+    duration: 15,
+  },
+  grammar: {
+    title: '语法练习',
+    description: '完成语法练习题',
+    content: '完成以下语法练习',
+    duration: 15,
+  },
+}
+
+// 尝试解析 JSON，处理各种格式问题
+function parseJSON(str: string): any {
+  // 移除 markdown 代码块标记
+  let cleaned = str.trim()
+  
+  // 移除 ```json 和 ``` 标记
+  cleaned = cleaned.replace(/```json\s*/g, '')
+  cleaned = cleaned.replace(/```\s*/g, '')
+  
+  // 移除开头的非 JSON 字符直到找到 {
+  const firstBrace = cleaned.indexOf('{')
+  const firstBracket = cleaned.indexOf('[')
+  
+  if (firstBrace === -1 && firstBracket === -1) {
+    throw new Error('No JSON found in response')
+  }
+  
+  let start = firstBrace
+  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+    start = firstBracket
+  }
+  
+  cleaned = cleaned.substring(start)
+  
+  // 如果以 [ 结尾但中间有 }，尝试修复
+  if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
+    const lastBrace = cleaned.lastIndexOf('}')
+    if (lastBrace !== -1) {
+      cleaned = cleaned.substring(0, lastBrace + 1)
+    }
+  }
+  
+  return JSON.parse(cleaned)
 }
 
 export default function AddTaskButton() {
@@ -40,80 +109,16 @@ export default function AddTaskButton() {
 
       const today = new Date().toISOString().split('T')[0]
 
-      // 根据任务类型生成不同的 prompt
-      const prompts: Record<string, string> = {
-        reading: `生成一道阅读理解题目，包含：
-1. 文章标题和简短描述（100字以内）
-2. 文章正文（200-300字）
-3. 3道选择题，每道题包含题目和4个选项
-4. 答案和简要解析
+      // 使用简单的 prompt
+      const simplePrompt = `Generate a JSON array with 1 learning task object for ${selectedType} practice. 
 
-输出JSON格式（必须是合法的JSON，不要包含其他文字）：
-{
-  "title": "题目标题",
-  "description": "文章简短描述",
-  "content": "文章正文内容",
-  "questions": [{"question": "题目1", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A", "explanation": "解析"}],
-  "duration": 25
-}`,
+Response format (only JSON, no other text):
+[{"title": "Task Title", "description": "Task description", "content": "Task content or question", "duration": number}]
 
-        listening: `生成一段听力练习，包含：
-1. 听力场景描述
-2. 听力原文文本（150-200字）
-3. 3道选择题和答案
+Example for reading:
+[{"title": "Reading Comprehension", "description": "Complete this reading exercise", "content": "Read the passage and answer the questions...", "duration": 25}]
 
-输出JSON格式（必须是合法的JSON，不要包含其他文字）：
-{
-  "title": "听力练习标题",
-  "description": "场景描述",
-  "audio_text": "听力原文（用于TTS播放）",
-  "questions": [{"question": "题目", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A"}],
-  "duration": 20
-}`,
-
-        writing: `生成一个写作题目，包含：
-1. 题目描述
-2. 要求（字数、内容要点）
-3. 参考范文开头（2-3句）
-
-输出JSON格式（必须是合法的JSON，不要包含其他文字）：
-{
-  "title": "写作题目",
-  "description": "题目描述和要求",
-  "requirements": "写作要求",
-  "sample_intro": "范文开头",
-  "duration": 30
-}`,
-
-        vocabulary: `生成10个词汇学习任务，包含：
-1. 单词
-2. 音标
-3. 词性
-4. 中文释义
-5. 例句
-
-输出JSON格式（必须是合法的JSON，不要包含其他文字）：
-{
-  "title": "今日词汇学习",
-  "words": [{"word": "abandon", "phonetic": "[əˈbændən]", "pos": "v.", "meaning": "放弃，遗弃", "example": "They had to abandon their car in the snow."}],
-  "duration": 20
-}`,
-
-        grammar: `生成一个语法练习，包含：
-1. 语法点描述
-2. 练习题（选择题）
-3. 答案和解析
-
-输出JSON格式（必须是合法的JSON，不要包含其他文字）：
-{
-  "title": "语法练习",
-  "grammar_point": "虚拟语气",
-  "questions": [{"question": "题目", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A", "explanation": "解析"}],
-  "duration": 15
-}`,
-      }
-
-      const prompt = prompts[selectedType] || prompts.reading
+Respond with JSON only:`
 
       // 调用 AI API
       const response = await fetch(API_CONFIG.endpoint, {
@@ -125,10 +130,10 @@ export default function AddTaskButton() {
         body: JSON.stringify({
           model: API_CONFIG.model,
           messages: [
-            { role: 'system', content: '你是一个专业的英语学习题目生成器。请严格按照JSON格式输出，不要包含任何其他文字。' },
-            { role: 'user', content: prompt }
+            { role: 'system', content: 'You are a JSON generator. Output ONLY valid JSON, no explanations or other text.' },
+            { role: 'user', content: simplePrompt }
           ],
-          temperature: 0.7,
+          temperature: 0.3,
         }),
       })
 
@@ -140,31 +145,34 @@ export default function AddTaskButton() {
       const data = await response.json()
       const content = data.choices?.[0]?.message?.content || ''
       
-      // 提取JSON
-      let jsonStr = content
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/{[\s\S]*}/)
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1] || jsonMatch[0]
-      }
+      console.log('AI raw response:', content)
       
+      // 解析 JSON
       let taskContent
       try {
-        taskContent = JSON.parse(jsonStr)
-      } catch (parseErr) {
-        console.error('JSON解析失败:', parseErr, '原始内容:', content)
-        // 使用默认格式
-        taskContent = {
-          title: taskTypes.find(t => t.value === selectedType)?.label + '练习',
-          description: 'AI生成的练习题目',
-          content: content.substring(0, 500) || '请查看具体任务内容',
-          duration: 20,
+        const parsed = parseJSON(content)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          taskContent = parsed[0]
+        } else if (typeof parsed === 'object') {
+          taskContent = parsed
+        } else {
+          throw new Error('Invalid JSON structure')
         }
+      } catch (parseErr) {
+        console.error('JSON解析失败，使用默认模板')
+        // 使用默认模板
+        taskContent = taskTemplates[selectedType as keyof typeof taskTemplates]
       }
 
-      // 确保 taskContent 有必要的字段
+      // 确保必要字段存在
       if (!taskContent.title) {
-        taskContent.title = taskTypes.find(t => t.value === selectedType)?.label + '练习'
+        taskContent.title = taskTemplates[selectedType as keyof typeof taskTemplates].title
       }
+      if (!taskContent.duration) {
+        taskContent.duration = taskTemplates[selectedType as keyof typeof taskTemplates].duration
+      }
+
+      console.log('Final task content:', taskContent)
 
       // 保存到数据库
       const { error: insertError } = await supabase.from('daily_tasks').insert({
