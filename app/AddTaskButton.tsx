@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 const taskTypes = [
@@ -22,13 +22,22 @@ export default function AddTaskButton() {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedType, setSelectedType] = useState('reading')
+  const [error, setError] = useState('')
   const supabase = createClient()
 
   const handleGenerate = async () => {
     setLoading(true)
+    setError('')
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      // 检查用户登录状态
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError || !user) {
+        setError('请先登录')
+        setLoading(false)
+        return
+      }
+
       const today = new Date().toISOString().split('T')[0]
 
       // 根据任务类型生成不同的 prompt
@@ -39,26 +48,26 @@ export default function AddTaskButton() {
 3. 3道选择题，每道题包含题目和4个选项
 4. 答案和简要解析
 
-输出JSON格式：
+输出JSON格式（必须是合法的JSON，不要包含其他文字）：
 {
   "title": "题目标题",
   "description": "文章简短描述",
-  "content": "文章正文",
-  "questions": [{"question": "题目1", "options": ["A", "B", "C", "D"], "answer": "A", "explanation": "解析"}],
+  "content": "文章正文内容",
+  "questions": [{"question": "题目1", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A", "explanation": "解析"}],
   "duration": 25
 }`,
 
         listening: `生成一段听力练习，包含：
-1. 听力场景描述（conversation/lecture/news）
+1. 听力场景描述
 2. 听力原文文本（150-200字）
 3. 3道选择题和答案
 
-输出JSON格式：
+输出JSON格式（必须是合法的JSON，不要包含其他文字）：
 {
   "title": "听力练习标题",
   "description": "场景描述",
   "audio_text": "听力原文（用于TTS播放）",
-  "questions": [{"question": "题目", "options": ["A", "B", "C", "D"], "answer": "A"}],
+  "questions": [{"question": "题目", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A"}],
   "duration": 20
 }`,
 
@@ -67,7 +76,7 @@ export default function AddTaskButton() {
 2. 要求（字数、内容要点）
 3. 参考范文开头（2-3句）
 
-输出JSON格式：
+输出JSON格式（必须是合法的JSON，不要包含其他文字）：
 {
   "title": "写作题目",
   "description": "题目描述和要求",
@@ -83,7 +92,7 @@ export default function AddTaskButton() {
 4. 中文释义
 5. 例句
 
-输出JSON格式：
+输出JSON格式（必须是合法的JSON，不要包含其他文字）：
 {
   "title": "今日词汇学习",
   "words": [{"word": "abandon", "phonetic": "[əˈbændən]", "pos": "v.", "meaning": "放弃，遗弃", "example": "They had to abandon their car in the snow."}],
@@ -92,20 +101,21 @@ export default function AddTaskButton() {
 
         grammar: `生成一个语法练习，包含：
 1. 语法点描述
-2. 练习题（选择题或填空题）
+2. 练习题（选择题）
 3. 答案和解析
 
-输出JSON格式：
+输出JSON格式（必须是合法的JSON，不要包含其他文字）：
 {
   "title": "语法练习",
   "grammar_point": "虚拟语气",
-  "questions": [{"question": "题目", "options": ["A", "B", "C", "D"], "answer": "A", "explanation": "解析"}],
+  "questions": [{"question": "题目", "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"], "answer": "A", "explanation": "解析"}],
   "duration": 15
 }`,
       }
 
       const prompt = prompts[selectedType] || prompts.reading
 
+      // 调用 AI API
       const response = await fetch(API_CONFIG.endpoint, {
         method: 'POST',
         headers: {
@@ -115,7 +125,7 @@ export default function AddTaskButton() {
         body: JSON.stringify({
           model: API_CONFIG.model,
           messages: [
-            { role: 'system', content: '你是一个专业的英语学习题目生成器。请严格按照JSON格式输出。' },
+            { role: 'system', content: '你是一个专业的英语学习题目生成器。请严格按照JSON格式输出，不要包含任何其他文字。' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
@@ -123,32 +133,42 @@ export default function AddTaskButton() {
       })
 
       if (!response.ok) {
-        throw new Error('API调用失败')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`API调用失败: ${errorData.error?.message || response.statusText}`)
       }
 
       const data = await response.json()
-      const content = data.choices[0].message.content
+      const content = data.choices?.[0]?.message?.content || ''
       
       // 提取JSON
+      let jsonStr = content
       const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/{[\s\S]*}/)
-      const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : content
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1] || jsonMatch[0]
+      }
       
       let taskContent
       try {
         taskContent = JSON.parse(jsonStr)
-      } catch {
-        // 如果解析失败，使用默认格式
+      } catch (parseErr) {
+        console.error('JSON解析失败:', parseErr, '原始内容:', content)
+        // 使用默认格式
         taskContent = {
           title: taskTypes.find(t => t.value === selectedType)?.label + '练习',
           description: 'AI生成的练习题目',
-          content: content.substring(0, 500),
+          content: content.substring(0, 500) || '请查看具体任务内容',
           duration: 20,
         }
       }
 
+      // 确保 taskContent 有必要的字段
+      if (!taskContent.title) {
+        taskContent.title = taskTypes.find(t => t.value === selectedType)?.label + '练习'
+      }
+
       // 保存到数据库
-      await supabase.from('daily_tasks').insert({
-        user_id: user?.id,
+      const { error: insertError } = await supabase.from('daily_tasks').insert({
+        user_id: user.id,
         task_date: today,
         task_type: selectedType,
         content: taskContent,
@@ -156,13 +176,19 @@ export default function AddTaskButton() {
         is_completed: false,
       })
 
+      if (insertError) {
+        console.error('数据库插入失败:', insertError)
+        throw new Error('保存任务失败: ' + insertError.message)
+      }
+
       // 关闭弹窗并刷新
+      alert('任务生成成功！')
       setIsOpen(false)
       window.location.reload()
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('生成任务失败:', err)
-      alert('生成任务失败，请重试')
+      setError(err.message || '生成任务失败，请重试')
     } finally {
       setLoading(false)
     }
@@ -211,6 +237,12 @@ export default function AddTaskButton() {
                 </button>
               ))}
             </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
