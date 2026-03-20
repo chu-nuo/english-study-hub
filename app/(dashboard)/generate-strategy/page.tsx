@@ -16,13 +16,6 @@ interface StrategyData {
   adaptive_rules: string
 }
 
-// 内置 API 配置
-const API_CONFIG = {
-  endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
-  apiKey: 'sk-zuokmjfwyhweoxhqwuszsiiixeqyfxmxatcvagjjtiacsblc',
-  model: 'deepseek-ai/DeepSeek-V3.2',
-}
-
 export default function GenerateStrategyPage() {
   const [profile, setProfile] = useState<any>(null)
   const [strategy, setStrategy] = useState<StrategyData | null>(null)
@@ -38,14 +31,18 @@ export default function GenerateStrategyPage() {
   }, [])
 
   const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      setProfile(data)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        setProfile(data)
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err)
     }
   }
 
@@ -60,31 +57,17 @@ export default function GenerateStrategyPage() {
     setDebugInfo('')
 
     try {
-      // 读取 prompt 模板
-      const promptResponse = await fetch('/prompts/strategy-generator.md')
-      let promptTemplate = await promptResponse.text()
-
-      // 替换变量
-      const prompt = promptTemplate
-        .replace('{exam_type}', profile.exam_type)
-        .replace('{current_level}', profile.current_level)
-        .replace('{target_score}', profile.target_score)
-        .replace('{daily_study_time}', profile.daily_study_time)
-
-      // 调用 AI API (SiliconFlow)
-      const response = await fetch(API_CONFIG.endpoint, {
+      // 调用后端 API 生成策略
+      const response = await fetch('/api/generate-strategy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_CONFIG.apiKey}`,
         },
         body: JSON.stringify({
-          model: API_CONFIG.model,
-          messages: [
-            { role: 'system', content: '你是一个专业的英语学习策略规划师。请严格按照用户要求输出 JSON 格式。' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7,
+          exam_type: profile.exam_type,
+          current_level: profile.current_level,
+          target_score: profile.target_score,
+          daily_study_time: profile.daily_study_time,
         }),
       })
 
@@ -92,21 +75,14 @@ export default function GenerateStrategyPage() {
         const errorData = await response.json().catch(() => ({}))
         console.error('API Error:', response.status, errorData)
         setDebugInfo(JSON.stringify({ status: response.status, error: errorData }, null, 2))
-        throw new Error(`API 调用失败: ${response.status} - ${errorData.error?.message || errorData.message || '未知错误'}`)
+        throw new Error(errorData.error || `API 调用失败: ${response.status}`)
       }
 
       const data = await response.json()
-      const content = data.choices[0].message.content
-      
-      // 提取 JSON
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/{[\s\S]*}/)
-      const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : content
-      
-      const parsedStrategy = JSON.parse(jsonStr)
-      setStrategy(parsedStrategy)
+      setStrategy(data.strategy)
     } catch (err: any) {
       console.error('Generate strategy error:', err)
-      setMessage('生成策略失败: ' + (err.message || '请检查 API Key 是否正确'))
+      setMessage('生成策略失败: ' + (err.message || '请稍后重试'))
     } finally {
       setLoading(false)
     }
@@ -146,12 +122,18 @@ export default function GenerateStrategyPage() {
             <div className="space-y-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <span className="font-medium">AI 模型:</span> {API_CONFIG.model}
+                  <span className="font-medium">AI 模型:</span> deepseek-ai/DeepSeek-V3.2
                 </p>
                 <p className="text-sm text-blue-800">
                   <span className="font-medium">服务提供商:</span> 硅基流动 (SiliconFlow)
                 </p>
               </div>
+
+              {!profile && (
+                <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                  请先<a href="/onboarding" className="underline font-medium">完善学习档案</a>，才能生成学习策略
+                </div>
+              )}
 
               {message && (
                 <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
@@ -168,7 +150,7 @@ export default function GenerateStrategyPage() {
 
               <button
                 onClick={generateStrategy}
-                disabled={loading}
+                disabled={loading || !profile}
                 className="w-full py-4 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
               >
                 {loading ? 'AI 正在生成策略...' : '生成学习策略'}
