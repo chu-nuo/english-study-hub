@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import AddTaskButton from './AddTaskButton'
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -80,7 +81,10 @@ export default async function HomePage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">今日任务</h3>
-            <span className="text-sm text-gray-500 dark:text-gray-400">{today}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{today}</span>
+              <AddTaskButton />
+            </div>
           </div>
 
           {!tasks || tasks.length === 0 ? (
