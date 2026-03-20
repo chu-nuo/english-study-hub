@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import AddTaskButton from './AddTaskButton'
+import ThemeToggle from './ThemeToggle'
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -41,6 +41,8 @@ export default async function HomePage() {
     .eq('user_id', user.id)
     .eq('task_date', today)
 
+  const daysSinceStart = Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24)) + 1
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 顶部导航 */}
@@ -48,6 +50,7 @@ export default async function HomePage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">今日学习</h1>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <Link href="/strategy" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
               我的策略
             </Link>
@@ -65,7 +68,7 @@ export default async function HomePage() {
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-700 dark:to-blue-800 rounded-2xl p-6 text-white mb-6">
           <h2 className="text-lg font-semibold">你好，{profile.username}！</h2>
           <p className="mt-1 text-blue-100 dark:text-blue-200">
-            今天是你的第 {Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24)) + 1} 天学习
+            今天是你的第 {daysSinceStart} 天学习
           </p>
           <div className="mt-4 flex items-center gap-4 text-sm">
             <span className="bg-white/20 dark:bg-white/10 px-3 py-1 rounded-full">
@@ -83,7 +86,12 @@ export default async function HomePage() {
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">今日任务</h3>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500 dark:text-gray-400">{today}</span>
-              <AddTaskButton />
+              <Link
+                href="/generate-daily"
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                AI生成
+              </Link>
             </div>
           </div>
 
@@ -129,7 +137,7 @@ export default async function HomePage() {
                       </div>
                     </div>
                     <Link
-                      href={`/tasks/${task.id}`}
+                      href={"/tasks/" + task.id}
                       className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                     >
                       {task.is_completed ? '查看' : '开始'}

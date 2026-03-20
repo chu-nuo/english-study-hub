@@ -15,7 +15,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
@@ -32,4 +32,14 @@ body {
   body {
     font-size: 16px; /* 防止 iOS 缩放 */
   }
+}
+
+/* 暗色模式过渡 */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 确保暗色模式下内容可见 */
+.dark {
+  color-scheme: dark;
 }

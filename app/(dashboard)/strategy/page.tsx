@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import ThemeToggle from '../../ThemeToggle'
 
 export default async function StrategyPage() {
   const supabase = await createClient()
@@ -28,7 +29,7 @@ export default async function StrategyPage() {
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">← 返回首页</Link>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">我的学习策略</h1>
-          <div />
+          <ThemeToggle />
         </div>
       </header>
 

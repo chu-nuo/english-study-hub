@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import ThemeToggle from '../../ThemeToggle'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -64,6 +65,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 px-4">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">AI英语学习平台</h1>
