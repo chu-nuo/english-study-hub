@@ -65,29 +65,44 @@ export default function GenerateDailyPage() {
       const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
       const weeklyPlan = strategy.strategy_json?.weekly_structure?.[dayOfWeek]
 
-      const prompt = `基于以下学习策略，为今天生成具体的学习任务：
+      // 根据任务类型生成更具体的内容
+      const taskTypePrompts: Record<string, string> = {
+        reading: '阅读理解：提供一篇雅思/托福/四六级阅读文章的标题、来源、字数，以及3-5道选择题让学生练习',
+        listening: '听力训练：提供一个听力练习场景，包含音频类型（对话/讲座/新闻）、时长，以及听力题目',
+        writing: '写作练习：给出一个写作题目，包含题目描述、字数要求、参考范文开头或写作思路',
+        vocabulary: '词汇学习：列出10-15个今日应学习的重点词汇，包含单词、音标、词性、中文释义、例句',
+        review: '复习巩固：设计复习内容，包含之前学过的重点知识点回顾、错题整理方法',
+      }
 
-考试类型: ${profile.exam_type}
-当前水平: ${profile.current_level}
-目标分数: ${profile.target_score}
-每日学习时间: ${profile.daily_study_time} 分钟
+      const selectedTaskTypes = selectedTypes.map(t => taskTypePrompts[t] || taskTypePrompts.reading).join('\n\n')
+
+      const prompt = `你是英语学习任务生成器。请为用户生成今日具体可执行的学习任务。
+
+用户信息：
+- 考试类型: ${profile.exam_type}
+- 当前水平: ${profile.current_level}
+- 目标分数: ${profile.target_score}
+- 每日学习时间: ${profile.daily_study_time} 分钟
 
 今日计划重点: ${weeklyPlan?.focus || '综合训练'}
-任务类型: ${weeklyPlan?.task_type || '多样化训练'}
 
-请生成 ${selectedTypes.length} 个具体任务，每个任务包含：
-1. 任务标题
-2. 任务描述
-3. 预计完成时间（分钟）
-4. 具体步骤
+请为以下 ${selectedTypes.length} 种任务类型各生成1个具体任务：
+${selectedTaskTypes}
 
-输出格式为 JSON 数组：
+【重要】每个任务必须包含：
+1. title - 具体可执行的任务标题（如："完成一篇雅思阅读真题"）
+2. description - 具体的任务描述，包含题目或内容
+3. duration - 预计完成时间（分钟）
+4. steps - 具体的执行步骤（3-5步）
+
+【输出格式】必须是合法的JSON数组，每个任务对象必须包含title、description、duration、steps四个字段。
+例如：
 [
   {
-    "title": "任务标题",
-    "description": "任务描述",
+    "title": "完成剑雅真题第X篇阅读",
+    "description": "阅读文章并完成题目...",
     "duration": 30,
-    "steps": ["步骤1", "步骤2", "步骤3"]
+    "steps": ["先阅读题目", "快速浏览文章", "定位关键词", "答题", "核对答案"]
   }
 ]`
 
