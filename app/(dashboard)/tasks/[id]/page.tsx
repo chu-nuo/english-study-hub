@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function TaskPage({ params }: { params: { id: string } }) {
+export default function TaskPage() {
+  const params = useParams()
   const [task, setTask] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
@@ -15,15 +17,21 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
 
   useEffect(() => {
-    fetchTask()
-  }, [])
+    if (params.id) {
+      fetchTask(params.id as string)
+    }
+  }, [params.id])
 
-  const fetchTask = async () => {
-    const { data } = await supabase
+  const fetchTask = async (taskId: string) => {
+    console.log('Fetching task with ID:', taskId)
+    
+    const { data, error } = await supabase
       .from('daily_tasks')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', taskId)
       .single()
+    
+    console.log('Task data:', data, 'Error:', error)
     
     if (data) {
       setTask(data)
@@ -66,11 +74,29 @@ export default function TaskPage({ params }: { params: { id: string } }) {
   }
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">加载中...</div>
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <div className="text-gray-600">加载中...</div>
+        </div>
+      </div>
+    )
   }
 
   if (!task) {
-    return <div className="min-h-screen flex items-center justify-center">任务不存在</div>
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">😕</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">任务不存在</h1>
+          <p className="text-gray-600 mb-4">该任务可能已被删除或不存在</p>
+          <Link href="/" className="text-blue-600 hover:text-blue-700 underline">
+            返回首页
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   const content = task.content || {}
