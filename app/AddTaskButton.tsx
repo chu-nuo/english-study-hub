@@ -18,73 +18,38 @@ const API_CONFIG = {
   model: 'deepseek-ai/DeepSeek-V3.2',
 }
 
-// 简单的任务标题模板
-const taskTemplates = {
+// 默认任务模板
+const defaultTasks = {
   reading: {
     title: '阅读理解练习',
     description: '完成一篇阅读理解练习',
-    content: '阅读以下文章并回答问题',
+    content: '阅读以下文章并回答问题，认真思考每个问题的答案。',
     duration: 25,
   },
   listening: {
     title: '听力练习',
     description: '完成一段听力练习',
-    content: '听录音并回答问题',
+    content: '听录音并回答问题，注意捕捉关键信息。',
     duration: 20,
   },
   writing: {
     title: '写作练习',
     description: '完成一篇写作练习',
-    content: '根据题目要求完成写作',
+    content: '根据题目要求，完成一篇不少于150字的作文。',
     duration: 30,
   },
   vocabulary: {
     title: '词汇学习',
     description: '学习今日重点词汇',
-    content: '学习以下重点词汇',
+    content: '学习以下10个重点词汇，掌握其发音、词性和用法。',
     duration: 15,
   },
   grammar: {
     title: '语法练习',
     description: '完成语法练习题',
-    content: '完成以下语法练习',
+    content: '完成以下语法练习题，巩固语法知识。',
     duration: 15,
   },
-}
-
-// 尝试解析 JSON，处理各种格式问题
-function parseJSON(str: string): any {
-  // 移除 markdown 代码块标记
-  let cleaned = str.trim()
-  
-  // 移除 ```json 和 ``` 标记
-  cleaned = cleaned.replace(/```json\s*/g, '')
-  cleaned = cleaned.replace(/```\s*/g, '')
-  
-  // 移除开头的非 JSON 字符直到找到 {
-  const firstBrace = cleaned.indexOf('{')
-  const firstBracket = cleaned.indexOf('[')
-  
-  if (firstBrace === -1 && firstBracket === -1) {
-    throw new Error('No JSON found in response')
-  }
-  
-  let start = firstBrace
-  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
-    start = firstBracket
-  }
-  
-  cleaned = cleaned.substring(start)
-  
-  // 如果以 [ 结尾但中间有 }，尝试修复
-  if (cleaned.startsWith('[') && !cleaned.endsWith(']')) {
-    const lastBrace = cleaned.lastIndexOf('}')
-    if (lastBrace !== -1) {
-      cleaned = cleaned.substring(0, lastBrace + 1)
-    }
-  }
-  
-  return JSON.parse(cleaned)
 }
 
 export default function AddTaskButton() {
@@ -92,35 +57,43 @@ export default function AddTaskButton() {
   const [loading, setLoading] = useState(false)
   const [selectedType, setSelectedType] = useState('reading')
   const [error, setError] = useState('')
+  const [debug, setDebug] = useState('')
   const supabase = createClient()
 
   const handleGenerate = async () => {
     setLoading(true)
     setError('')
+    setDebug('开始生成任务...\n')
 
     try {
-      // 检查用户登录状态
+      // 步骤1：检查用户登录状态
+      setDebug(prev => prev + '1. 检查登录状态...\n')
       const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) {
+      
+      if (authError) {
+        setDebug(prev => prev + `登录检查失败: ${authError.message}\n`)
+        setError('检查登录状态失败: ' + authError.message)
+        setLoading(false)
+        return
+      }
+      
+      if (!user) {
+        setDebug(prev => prev + '用户未登录\n')
         setError('请先登录')
         setLoading(false)
         return
       }
+      setDebug(prev => prev + `用户已登录: ${user.id}\n`)
 
       const today = new Date().toISOString().split('T')[0]
+      setDebug(prev => prev + `日期: ${today}\n`)
 
-      // 使用简单的 prompt
-      const simplePrompt = `Generate a JSON array with 1 learning task object for ${selectedType} practice. 
+      // 步骤2：调用 AI API
+      setDebug(prev => prev + '2. 调用AI API...\n')
+      
+      const prompt = `Generate a simple JSON object for a ${selectedType} learning task. Only respond with valid JSON like this:
+{"title": "Task Title", "description": "Description", "content": "What to do", "duration": 20}`
 
-Response format (only JSON, no other text):
-[{"title": "Task Title", "description": "Task description", "content": "Task content or question", "duration": number}]
-
-Example for reading:
-[{"title": "Reading Comprehension", "description": "Complete this reading exercise", "content": "Read the passage and answer the questions...", "duration": 25}]
-
-Respond with JSON only:`
-
-      // 调用 AI API
       const response = await fetch(API_CONFIG.endpoint, {
         method: 'POST',
         headers: {
@@ -130,73 +103,84 @@ Respond with JSON only:`
         body: JSON.stringify({
           model: API_CONFIG.model,
           messages: [
-            { role: 'system', content: 'You are a JSON generator. Output ONLY valid JSON, no explanations or other text.' },
-            { role: 'user', content: simplePrompt }
+            { role: 'system', content: 'You are a JSON generator. Only output valid JSON, no other text.' },
+            { role: 'user', content: prompt }
           ],
           temperature: 0.3,
         }),
       })
 
+      setDebug(prev => prev + `AI响应状态: ${response.status}\n`)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(`API调用失败: ${errorData.error?.message || response.statusText}`)
+        let errorMsg = `API错误: ${response.status}`
+        try {
+          const errorData = await response.json()
+          errorMsg += ` - ${errorData.error?.message || JSON.stringify(errorData)}`
+        } catch {}
+        setDebug(prev => prev + errorMsg + '\n')
+        setError(errorMsg)
+        setLoading(false)
+        return
       }
 
       const data = await response.json()
       const content = data.choices?.[0]?.message?.content || ''
+      setDebug(prev => prev + `AI返回内容: ${content.substring(0, 100)}...\n`)
+
+      // 步骤3：解析 JSON
+      setDebug(prev => prev + '3. 解析AI返回内容...\n')
       
-      console.log('AI raw response:', content)
+      let taskContent = defaultTasks[selectedType as keyof typeof defaultTasks]
       
-      // 解析 JSON
-      let taskContent
+      // 尝试解析 AI 返回的 JSON
       try {
-        const parsed = parseJSON(content)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          taskContent = parsed[0]
-        } else if (typeof parsed === 'object') {
-          taskContent = parsed
+        // 提取 JSON
+        let jsonStr = content.trim()
+        const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0]
+          const parsed = JSON.parse(jsonStr)
+          if (parsed.title) {
+            taskContent = { ...taskContent, ...parsed }
+            setDebug(prev => prev + `解析成功: ${taskContent.title}\n`)
+          }
         } else {
-          throw new Error('Invalid JSON structure')
+          setDebug(prev => prev + '未找到JSON，使用默认模板\n')
         }
-      } catch (parseErr) {
-        console.error('JSON解析失败，使用默认模板')
-        // 使用默认模板
-        taskContent = taskTemplates[selectedType as keyof typeof taskTemplates]
+      } catch (e: any) {
+        setDebug(prev => prev + `JSON解析失败: ${e.message}，使用默认模板\n`)
       }
 
-      // 确保必要字段存在
-      if (!taskContent.title) {
-        taskContent.title = taskTemplates[selectedType as keyof typeof taskTemplates].title
-      }
-      if (!taskContent.duration) {
-        taskContent.duration = taskTemplates[selectedType as keyof typeof taskTemplates].duration
-      }
-
-      console.log('Final task content:', taskContent)
-
-      // 保存到数据库
+      // 步骤4：保存到数据库
+      setDebug(prev => prev + '4. 保存到数据库...\n')
+      
       const { error: insertError } = await supabase.from('daily_tasks').insert({
         user_id: user.id,
         task_date: today,
         task_type: selectedType,
         content: taskContent,
-        audio_text: taskContent.audio_text || null,
         is_completed: false,
       })
 
       if (insertError) {
-        console.error('数据库插入失败:', insertError)
-        throw new Error('保存任务失败: ' + insertError.message)
+        setDebug(prev => prev + `数据库错误: ${insertError.message}\n`)
+        setError('保存任务失败: ' + insertError.message)
+        setLoading(false)
+        return
       }
 
-      // 关闭弹窗并刷新
+      setDebug(prev => prev + '保存成功！\n')
+      
+      // 成功
       alert('任务生成成功！')
       setIsOpen(false)
       window.location.reload()
 
     } catch (err: any) {
-      console.error('生成任务失败:', err)
-      setError(err.message || '生成任务失败，请重试')
+      const errorMsg = err.message || '未知错误'
+      setDebug(prev => prev + `捕获异常: ${errorMsg}\n`)
+      setError('生成失败: ' + errorMsg)
     } finally {
       setLoading(false)
     }
@@ -219,7 +203,7 @@ Respond with JSON only:`
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">AI智能出题</h2>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-xl"
               >
                 ✕
               </button>
@@ -252,6 +236,13 @@ Respond with JSON only:`
               </div>
             )}
 
+            {/* 调试信息 */}
+            {debug && process.env.NODE_ENV === 'development' && (
+              <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 text-xs text-gray-600 dark:text-gray-300 rounded-lg overflow-auto max-h-32 font-mono">
+                <pre>{debug}</pre>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setIsOpen(false)}
@@ -266,7 +257,7 @@ Respond with JSON only:`
               >
                 {loading ? (
                   <>
-                    <span className="animate-spin">⏳</span>
+                    <span>⏳</span>
                     生成中...
                   </>
                 ) : (
