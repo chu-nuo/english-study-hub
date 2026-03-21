@@ -56,25 +56,38 @@ export default function GenerateDailyPage() {
 
   const fetchData = async () => {
     setInitialLoading(true)
+    
+    // 10秒超时保护
+    const timeoutId = setTimeout(() => {
+      setInitialLoading(false)
+      setMessage('加载超时，请刷新页面重试')
+    }, 10000)
+    
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        setProfile(profileData)
-
-        const { data: strategyData } = await supabase
-          .from('learning_strategies')
-          .select('*')
-          .eq('user_id', user.id)
-          .single()
-        setStrategy(strategyData)
+      clearTimeout(timeoutId)
+      
+      if (!user) {
+        setInitialLoading(false)
+        return
       }
+      
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      setProfile(profileData)
+
+      const { data: strategyData } = await supabase
+        .from('learning_strategies')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+      setStrategy(strategyData)
     } catch (error) {
       console.error('获取数据失败:', error)
+      setMessage('加载数据失败，请刷新页面')
     } finally {
       setInitialLoading(false)
     }
