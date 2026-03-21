@@ -98,11 +98,16 @@ ${selectedTaskTypes}
     const data = await response.json()
     const content = data.choices[0].message.content
 
+    console.log('AI response content length:', content?.length)
+    console.log('AI response preview:', content?.substring(0, 200))
+
     // 尝试解析 JSON
     let tasks
     try {
       tasks = JSON.parse(content)
-    } catch {
+      console.log('Parsed tasks count:', tasks?.length)
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError)
       // 如果失败，尝试提取 JSON
       const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/)
       if (jsonMatch) {

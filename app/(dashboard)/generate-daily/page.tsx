@@ -110,21 +110,27 @@ export default function GenerateDailyPage() {
 
       // 保存任务到数据库
       const { data: { user } } = await supabase.auth.getUser()
+      console.log('Current user:', user?.id)
       
       for (let i = 0; i < tasks.length; i++) {
-        const { error: insertError } = await supabase.from('daily_tasks').insert({
+        const taskData = {
           user_id: user?.id,
           task_date: today,
           task_type: selectedTypes[i] || 'reading',
           content: tasks[i],
           audio_text: tasks[i].audio_text || null,
-        })
+        }
+        console.log('Inserting task:', JSON.stringify(taskData, null, 2))
+        
+        const { error: insertError } = await supabase.from('daily_tasks').insert(taskData)
         
         if (insertError) {
           console.error('插入任务失败:', insertError)
+          throw new Error(`保存任务失败: ${insertError.message}`)
         }
       }
 
+      console.log('All tasks inserted successfully, redirecting...')
       router.push('/')
     } catch (err: any) {
       setMessage('生成任务失败: ' + (err.message || '请稍后重试'))
