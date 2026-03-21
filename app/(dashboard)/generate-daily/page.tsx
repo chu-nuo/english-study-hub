@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const taskTypes = [
@@ -18,10 +19,25 @@ const API_CONFIG = {
   model: 'deepseek-ai/DeepSeek-V3.2',
 }
 
-// MiniMax TTS API 配置
-const TTS_CONFIG = {
-  endpoint: 'https://api.minimax.chat/v1/t2a_v2',
-  apiKey: '', // 需要填入 MiniMax API Key
+// 请求超时包装器
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 60000): Promise<Response> => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    return response
+  } catch (error: any) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error('请求超时，请稍后重试')
+    }
+    throw error
+  }
 }
 
 export default function GenerateDailyPage() {
@@ -29,6 +45,7 @@ export default function GenerateDailyPage() {
   const [strategy, setStrategy] = useState<any>(null)
   const [selectedTypes, setSelectedTypes] = useState<string[]>(['reading', 'vocabulary'])
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [message, setMessage] = useState('')
   const router = useRouter()
   const supabase = createClient()
@@ -38,21 +55,28 @@ export default function GenerateDailyPage() {
   }, [])
 
   const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      setProfile(profileData)
+    setInitialLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+        setProfile(profileData)
 
-      const { data: strategyData } = await supabase
-        .from('learning_strategies')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-      setStrategy(strategyData)
+        const { data: strategyData } = await supabase
+          .from('learning_strategies')
+          .select('*')
+          .eq('user_id', user.id)
+          .single()
+        setStrategy(strategyData)
+      }
+    } catch (error) {
+      console.error('获取数据失败:', error)
+    } finally {
+      setInitialLoading(false)
     }
   }
 
@@ -113,7 +137,7 @@ ${selectedTaskTypes}
   }
 ]`
 
-      const response = await fetch(API_CONFIG.endpoint, {
+      const response = await fetchWithTimeout(API_CONFIG.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,12 +146,13 @@ ${selectedTaskTypes}
         body: JSON.stringify({
           model: API_CONFIG.model,
           messages: [
-            { role: 'system', content: '你是一个专业的英语学习任务规划师。请严格按照用户要求输出 JSON 格式。' },
+            { role: 'system', content: '你是一个专业的英语学习任务规划师。请严格按照用户要求输出 JSON 格式，只输出JSON数组，不要任何其他文字。' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
+          max_tokens: 4000,
         }),
-      })
+      }, 90000)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -137,10 +162,25 @@ ${selectedTaskTypes}
       const data = await response.json()
       const content = data.choices[0].message.content
       
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/)
-      const jsonStr = jsonMatch ? jsonMatch[1] || jsonMatch[0] : content
-      
-      const tasks = JSON.parse(jsonStr)
+      // 尝试解析 JSON
+      let tasks
+      try {
+        // 先尝试直接解析
+        tasks = JSON.parse(content)
+      } catch {
+        // 如果失败，尝试提取 JSON
+        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          const jsonStr = jsonMatch[1] || jsonMatch[0]
+          tasks = JSON.parse(jsonStr)
+        } else {
+          throw new Error('AI 返回格式错误，请重试')
+        }
+      }
+
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        throw new Error('生成的任务格式错误，请重试')
+      }
 
       // 保存任务到数据库
       const { data: { user } } = await supabase.auth.getUser()
@@ -230,16 +270,13 @@ ${selectedTaskTypes}
 
           <button
             onClick={generateTasks}
-            disabled={loading || selectedTypes.length === 0 || !profile || !strategy}
-            className="w-full py-4 px-6 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50"
+            disabled={loading || initialLoading || selectedTypes.length === 0 || !profile || !strategy}
+            className="w-full py-4 px-6 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'AI 正在生成任务...' : `生成 ${selectedTypes.length} 个任务`}
+            {initialLoading ? '加载中...' : loading ? 'AI 正在生成任务...' : `生成 ${selectedTypes.length} 个任务`}
           </button>
         </div>
       </div>
     </div>
   )
 }
-
-// 添加 useRouter import
-import { useRouter } from 'next/navigation'
