@@ -329,6 +329,7 @@ export default function TaskPage() {
   const content = task.content || {}
   const hasQuiz = content.questions && content.questions.length > 0
   const hasPassage = content.passage && content.passage.length > 0
+  const hasAudioText = content.audio_text && content.audio_text.length > 0
   const hasVocabCards = task.task_type === 'vocabulary' && content.words && content.words.length > 0
 
   return (
@@ -394,7 +395,7 @@ export default function TaskPage() {
         )}
 
         {/* 阅读/听力任务 - 文章和题目 */}
-        {(hasQuiz || hasPassage) && (
+        {(hasQuiz || hasPassage || hasAudioText) && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
             {/* 文章内容 */}
             {hasPassage && (
@@ -407,7 +408,7 @@ export default function TaskPage() {
             )}
 
             {/* 听力原文 */}
-            {task.task_type === 'listening' && content.audio_text && (
+            {hasAudioText && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">🎧 听力原文</h3>
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300">
