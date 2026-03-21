@@ -327,8 +327,9 @@ export default function TaskPage() {
   }
 
   const content = task.content || {}
-  const hasQuiz = content.questions && content.answers
-  const hasVocabCards = task.task_type === 'vocabulary' && content.words
+  const hasQuiz = content.questions && content.questions.length > 0
+  const hasPassage = content.passage && content.passage.length > 0
+  const hasVocabCards = task.task_type === 'vocabulary' && content.words && content.words.length > 0
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -393,10 +394,10 @@ export default function TaskPage() {
         )}
 
         {/* 阅读/听力任务 - 文章和题目 */}
-        {hasQuiz && (
+        {(hasQuiz || hasPassage) && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
             {/* 文章内容 */}
-            {content.passage && (
+            {hasPassage && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">文章内容</h3>
                 <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -416,10 +417,12 @@ export default function TaskPage() {
             )}
 
             {/* 题目 */}
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">练习题</h3>
-              <QuizSection questions={content.questions} answers={content.answers} taskType={task.task_type} />
-            </div>
+            {hasQuiz && (
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">练习题</h3>
+                <QuizSection questions={content.questions} answers={content.answers || []} taskType={task.task_type} />
+              </div>
+            )}
           </div>
         )}
 
