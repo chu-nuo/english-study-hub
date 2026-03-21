@@ -15,81 +15,90 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 根据任务类型生成更具体的内容
-    const getTaskPrompt = (type: string) => {
-      switch (type) {
-        case 'reading':
-          return `生成一个完整的阅读理解练习，必须包含：
-1. passage: 一篇完整的英文文章（300-500词），主题可以是科技、环境、教育、社会等，要有实际内容不是placeholder
-2. questions: 4-5道选择题，每题4个选项，题目要有实质内容
-3. answers: 每道题的正确答案索引(0-3)和详细解析
+    // 简化的任务生成 - 避免复杂的JSON嵌套导致解析错误
+    const getSimpleTaskPrompt = (type: string) => {
+      const baseContent = {
+        reading: `【阅读任务内容格式】
+title: 阅读理解：[文章主题]
+description: 阅读以下文章并完成理解题目
+passage: |
+  [在这里写完整的英文文章，300-500词，主题可以是科技、环境、教育、健康等]
+questions:
+1. [问题1]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
+2. [问题2]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
+3. [问题3]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
+4. [问题4]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]`,
 
-示例格式：
-{
-  "title": "阅读理解：人工智能对教育的影响",
-  "description": "阅读关于AI在教育领域应用的文章，完成相关理解题目",
-  "duration": 30,
-  "steps": ["通读文章把握主旨", "仔细阅读题目", "回到文章定位答案", "选择最佳选项", "核对答案并阅读解析"],
-  "content": {
-    "passage": "Artificial intelligence is transforming education in unprecedented ways... (完整文章)",
-    "questions": [
-      {"question": "What is the main idea of the passage?", "options": ["AI will replace teachers", "AI is changing how we learn", "AI is too expensive", "AI is not useful"]}
-    ],
-    "answers": [
-      {"correct": 1, "explanation": "The passage discusses how AI transforms education, not replacing teachers or being expensive."}
-    ]
-  }
-}`
+        listening: `【听力任务内容格式】
+title: 听力训练：[场景主题]
+description: 听以下对话/独白并回答问题
+audio_text: |
+  [在这里写完整的听力原文，对话或独白形式，200-400词]
+questions:
+1. [问题1]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
+2. [问题2]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
+3. [问题3]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]`,
 
-        case 'listening':
-          return `生成一个完整的听力练习，必须包含：
-1. audio_text: 一段完整的听力原文（对话或独白，200-400词）
-2. questions: 3-4道听力理解选择题
-3. answers: 每道题的正确答案和解析
+        writing: `【写作任务内容格式】
+title: 写作练习：[题目类型]
+description: 根据题目要求完成写作任务
+prompt: [具体的写作题目，如：Some people think... Do you agree or disagree?]
+word_count: [字数要求，如150-200词]
+outline: |
+  开头段：[怎么写开头]
+  主体段1：[论点1及展开]
+  主体段2：[论点2及展开]
+  结尾段：[怎么写结尾]
+sample: |
+  [在这里写完整的范文，150-250词]
+checklist:
+- [自查点1]
+- [自查点2]
+- [自查点3]`,
 
-注意：听力原文要有实际内容，可以是校园生活、工作场景、新闻报道等。`
+        vocabulary: `【词汇任务内容格式】
+title: 词汇学习：核心词汇${exam_type?.toUpperCase()}
+description: 学习并掌握以下核心词汇
+words:
+1. [单词] [音标] [词性] [中文释义] 例句：[英文例句]
+2. [单词] [音标] [词性] [中文释义] 例句：[英文例句]
+3. [单词] [音标] [词性] [中文释义] 例句：[英文例句]
+[继续到12-15个单词]`,
 
-        case 'writing':
-          return `生成一个完整的写作练习，必须包含：
-1. prompt: 具体的写作题目（如："Some people think... Do you agree or disagree?"）
-2. outline: 详细的写作思路（开头怎么写、中间论点、结尾怎么写）
-3. sample: 一篇完整的高分范文（150-250词）
-4. checklist: 自查清单（如：是否回应题目、语法检查、词汇多样性等）
-
-注意：题目要具体，范文要完整可用，不是placeholder。`
-
-        case 'vocabulary':
-          return `生成一组完整的词汇学习材料，必须包含：
-1. words: 12-15个单词，每个包含：
-   - word: 单词本身
-   - phonetic: 音标（如 /ˈæpəl/）
-   - pos: 词性（n./v./adj./adv.）
-   - meaning: 中文释义
-   - example: 英文例句
-
-单词应该是${exam_type?.toUpperCase()}考试核心词汇，难度适中。
-
-示例：
-{
-  "words": [
-    {"word": "significant", "phonetic": "/sɪɡˈnɪfɪkənt/", "pos": "adj.", "meaning": "重要的，有意义的", "example": "This is a significant discovery for science."}
-  ]
-}`
-
-        case 'review':
-          return `生成一个复习任务，包含：
-1. summary: 重点知识点总结（语法点、词汇搭配、做题技巧等）
-2. practice: 3-5道练习题（选择题或填空题）
-3. tips: 学习建议
-
-内容要具体实用，不是泛泛而谈。`
-
-        default:
-          return '生成一个英语学习任务，包含具体可执行的内容。'
+        review: `【复习任务内容格式】
+title: 复习巩固：重点回顾
+description: 复习近期学习的重点内容
+summary: |
+  [知识点总结]
+practice:
+1. [练习题1]? 答案：[答案] 解析：[解析]
+2. [练习题2]? 答案：[答案] 解析：[解析]
+tips: |
+  [学习建议]`
       }
+      return baseContent[type as keyof typeof baseContent] || baseContent.reading
     }
 
-    const selectedTaskTypes = task_types.map((t: string) => getTaskPrompt(t)).join('\n\n---\n\n')
+    const selectedTaskTypes = task_types.map((t: string) => getSimpleTaskPrompt(t)).join('\n\n==========\n\n')
+
+    const prompt = `请为${exam_type?.toUpperCase()}考生生成${task_types.length}个学习任务。
+
+考生信息：
+- 当前水平：${current_level}
+- 目标分数：${target_score}
+- 每日学习时间：${daily_study_time}分钟
+
+【非常重要】
+1. 必须生成真实、完整、可直接学习的内容
+2. 不要生成placeholder或示例说明
+3. 阅读文章必须是完整的真实文章
+4. 写作题目必须具体，范文必须是完整的文章
+5. 词汇必须是真实单词，有正确音标和例句
+
+任务类型：
+${selectedTaskTypes}
+
+请按照上述格式生成内容，确保学生可以直接开始学习。内容要充实、有实际价值。`
 
     const prompt = `你是专业的英语教育内容生成专家。请为用户生成今日具体、完整、可直接使用的学习任务。
 
@@ -139,7 +148,7 @@ ${selectedTaskTypes}
       body: JSON.stringify({
         model: model,
         messages: [
-          { role: 'system', content: '你是一个专业的英语学习任务规划师。请严格按照用户要求输出 JSON 格式，只输出JSON数组，不要任何其他文字。' },
+          { role: 'system', content: '你是专业的英语教育内容生成专家。请生成真实、完整、可直接使用的英语学习材料。' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
@@ -157,31 +166,12 @@ ${selectedTaskTypes}
     }
 
     const data = await response.json()
-    const content = data.choices[0].message.content
+    const aiContent = data.choices[0].message.content
 
-    console.log('AI response content length:', content?.length)
-    console.log('AI response preview:', content?.substring(0, 200))
+    console.log('AI response length:', aiContent?.length)
 
-    // 尝试解析 JSON
-    let tasks
-    try {
-      tasks = JSON.parse(content)
-      console.log('Parsed tasks count:', tasks?.length)
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError)
-      // 如果失败，尝试提取 JSON
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[1] || jsonMatch[0]
-        tasks = JSON.parse(jsonStr)
-      } else {
-        console.error('JSON parse error, content:', content)
-        return NextResponse.json(
-          { error: 'AI 返回的数据格式不正确' },
-          { status: 500 }
-        )
-      }
-    }
+    // 解析AI返回的文本格式，转换为任务对象
+    const tasks = parseTasksFromText(aiContent, task_types)
 
     if (!Array.isArray(tasks) || tasks.length === 0) {
       return NextResponse.json(
@@ -197,5 +187,187 @@ ${selectedTaskTypes}
       { error: err.message || '生成任务时发生错误' },
       { status: 500 }
     )
+  }
+}
+
+// 解析AI返回的文本为任务对象
+function parseTasksFromText(text: string, taskTypes: string[]): any[] {
+  const tasks: any[] = []
+  const sections = text.split(/==========/)
+
+  for (let i = 0; i < sections.length && i < taskTypes.length; i++) {
+    const section = sections[i].trim()
+    const type = taskTypes[i]
+
+    try {
+      const task = parseTaskSection(section, type)
+      if (task) tasks.push(task)
+    } catch (e) {
+      console.error(`解析${type}任务失败:`, e)
+    }
+  }
+
+  return tasks
+}
+
+function parseTaskSection(text: string, type: string): any | null {
+  // 提取标题
+  const titleMatch = text.match(/title:\s*(.+)/i)
+  const title = titleMatch ? titleMatch[1].trim() : `${type}任务`
+
+  // 提取描述
+  const descMatch = text.match(/description:\s*(.+)/i)
+  const description = descMatch ? descMatch[1].trim() : '完成学习任务'
+
+  const baseTask = {
+    title,
+    description,
+    duration: 30,
+    steps: ['仔细阅读任务要求', '完成学习内容', '检查答案并复习'],
+    content: {}
+  }
+
+  switch (type) {
+    case 'reading':
+      return parseReadingTask(text, baseTask)
+    case 'listening':
+      return parseListeningTask(text, baseTask)
+    case 'writing':
+      return parseWritingTask(text, baseTask)
+    case 'vocabulary':
+      return parseVocabularyTask(text, baseTask)
+    case 'review':
+      return parseReviewTask(text, baseTask)
+    default:
+      return baseTask
+  }
+}
+
+function parseReadingTask(text: string, baseTask: any): any {
+  // 提取文章
+  const passageMatch = text.match(/passage:\s*\|?\s*\n?([\s\S]*?)(?=questions:|$)/i)
+  const passage = passageMatch ? passageMatch[1].trim() : ''
+
+  // 提取题目
+  const questions: any[] = []
+  const answers: any[] = []
+
+  const questionMatches = text.matchAll(/(\d+)\.\s*([^?]+)\?\s*A\)\s*([^B]+)B\)\s*([^C]+)C\)\s*([^D]+)D\)\s*([^\n]+?)\s*答案:([A-D])\s*解析:([^\n]+)/gi)
+
+  for (const match of questionMatches) {
+    const correctMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
+    questions.push({
+      question: match[2].trim(),
+      options: [match[3].trim(), match[4].trim(), match[5].trim(), match[6].trim()]
+    })
+    answers.push({
+      correct: correctMap[match[7].toUpperCase()] || 0,
+      explanation: match[8].trim()
+    })
+  }
+
+  return {
+    ...baseTask,
+    content: { passage, questions, answers }
+  }
+}
+
+function parseListeningTask(text: string, baseTask: any): any {
+  const audioMatch = text.match(/audio_text:\s*\|?\s*\n?([\s\S]*?)(?=questions:|$)/i)
+  const audio_text = audioMatch ? audioMatch[1].trim() : ''
+
+  const questions: any[] = []
+  const answers: any[] = []
+
+  const questionMatches = text.matchAll(/(\d+)\.\s*([^?]+)\?\s*A\)\s*([^B]+)B\)\s*([^C]+)C\)\s*([^D]+)D\)\s*([^\n]+?)\s*答案:([A-D])\s*解析:([^\n]+)/gi)
+
+  for (const match of questionMatches) {
+    const correctMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
+    questions.push({
+      question: match[2].trim(),
+      options: [match[3].trim(), match[4].trim(), match[5].trim(), match[6].trim()]
+    })
+    answers.push({
+      correct: correctMap[match[7].toUpperCase()] || 0,
+      explanation: match[8].trim()
+    })
+  }
+
+  return {
+    ...baseTask,
+    content: { audio_text, questions, answers }
+  }
+}
+
+function parseWritingTask(text: string, baseTask: any): any {
+  const promptMatch = text.match(/prompt:\s*(.+)/i)
+  const wordCountMatch = text.match(/word_count:\s*(.+)/i)
+  const outlineMatch = text.match(/outline:\s*\|?\s*\n?([\s\S]*?)(?=sample:|$)/i)
+  const sampleMatch = text.match(/sample:\s*\|?\s*\n?([\s\S]*?)(?=checklist:|$)/i)
+  const checklistMatch = text.match(/checklist:\s*\n?([\s\S]*?)$/i)
+
+  const checklist: string[] = []
+  if (checklistMatch) {
+    const items = checklistMatch[1].matchAll(/-\s*(.+)/g)
+    for (const item of items) {
+      checklist.push(item[1].trim())
+    }
+  }
+
+  return {
+    ...baseTask,
+    content: {
+      prompt: promptMatch ? promptMatch[1].trim() : '',
+      word_count: wordCountMatch ? wordCountMatch[1].trim() : '150-200词',
+      outline: outlineMatch ? outlineMatch[1].trim() : '',
+      sample: sampleMatch ? sampleMatch[1].trim() : '',
+      checklist
+    }
+  }
+}
+
+function parseVocabularyTask(text: string, baseTask: any): any {
+  const words: any[] = []
+
+  const wordMatches = text.matchAll(/(\d+)\.\s*(\w+)\s+([\/\[\]ˈˌaɪeəʊɔuæɑɒɛɜŋθðʃʒ\.]+)\s+(\w+\.?)\s+([^例]+?)\s*例句[:：]\s*(.+)/gi)
+
+  for (const match of wordMatches) {
+    words.push({
+      word: match[2].trim(),
+      phonetic: match[3].trim(),
+      pos: match[4].trim(),
+      meaning: match[5].trim(),
+      example: match[6].trim()
+    })
+  }
+
+  return {
+    ...baseTask,
+    content: { words }
+  }
+}
+
+function parseReviewTask(text: string, baseTask: any): any {
+  const summaryMatch = text.match(/summary:\s*\|?\s*\n?([\s\S]*?)(?=practice:|$)/i)
+  const tipsMatch = text.match(/tips:\s*\|?\s*\n?([\s\S]*?)$/i)
+
+  const practice: any[] = []
+  const practiceMatches = text.matchAll(/(\d+)\.\s*([^?]+)\?\s*答案:([^\n]+?)\s*解析:([^\n]+)/gi)
+
+  for (const match of practiceMatches) {
+    practice.push({
+      question: match[2].trim(),
+      answer: match[3].trim(),
+      explanation: match[4].trim()
+    })
+  }
+
+  return {
+    ...baseTask,
+    content: {
+      summary: summaryMatch ? summaryMatch[1].trim() : '',
+      practice,
+      tips: tipsMatch ? tipsMatch[1].trim() : ''
+    }
   }
 }
