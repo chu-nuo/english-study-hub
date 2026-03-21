@@ -330,6 +330,7 @@ export default function TaskPage() {
   const hasQuiz = content.questions && content.questions.length > 0
   const hasPassage = content.passage && content.passage.length > 0
   const hasAudioText = content.audio_text && content.audio_text.length > 0
+  const hasWritingContent = content.prompt && content.sample
   const hasVocabCards = task.task_type === 'vocabulary' && content.words && content.words.length > 0
 
   return (
@@ -428,12 +429,15 @@ export default function TaskPage() {
         )}
 
         {/* 写作任务 */}
-        {task.task_type === 'writing' && content.prompt && (
+        {(task.task_type === 'writing' || hasWritingContent) && content.prompt && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6 space-y-6">
             <div>
               <h3 className="font-semibold text-gray-900 dark:text-white mb-3">写作题目</h3>
               <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
                 <p className="text-gray-800 dark:text-gray-200">{content.prompt}</p>
+                {content.word_count && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">字数要求：{content.word_count}</p>
+                )}
               </div>
             </div>
 
