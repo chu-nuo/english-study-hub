@@ -1,10 +1,245 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+
+// 阅读/听力题目组件
+function QuizSection({ questions, answers, taskType }: { questions: any[], answers: any[], taskType: string }) {
+  const [userAnswers, setUserAnswers] = useState<number[]>(new Array(questions.length).fill(-1))
+  const [showResults, setShowResults] = useState(false)
+
+  const handleSelect = (questionIdx: number, optionIdx: number) => {
+    if (showResults) return
+    const newAnswers = [...userAnswers]
+    newAnswers[questionIdx] = optionIdx
+    setUserAnswers(newAnswers)
+  }
+
+  const checkAnswers = () => {
+    setShowResults(true)
+  }
+
+  const correctCount = userAnswers.filter((ans, idx) => ans === answers[idx]?.correct).length
+
+  return (
+    <div className="space-y-6">
+      {questions.map((q, idx) => (
+        <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+          <p className="font-medium text-gray-900 dark:text-white mb-3">
+            {idx + 1}. {q.question}
+          </p>
+          <div className="space-y-2">
+            {q.options.map((option: string, optIdx: number) => {
+              const isSelected = userAnswers[idx] === optIdx
+              const isCorrect = answers[idx]?.correct === optIdx
+              const showCorrect = showResults && isCorrect
+              const showWrong = showResults && isSelected && !isCorrect
+
+              return (
+                <button
+                  key={optIdx}
+                  onClick={() => handleSelect(idx, optIdx)}
+                  disabled={showResults}
+                  className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                    showCorrect
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/30'
+                      : showWrong
+                      ? 'border-red-500 bg-red-50 dark:bg-red-900/30'
+                      : isSelected
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
+                  {option}
+                </button>
+              )
+            })}
+          </div>
+          {showResults && answers[idx]?.explanation && (
+            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-800 dark:text-blue-300">
+              <span className="font-medium">解析：</span>
+              {answers[idx].explanation}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {!showResults ? (
+        <button
+          onClick={checkAnswers}
+          disabled={userAnswers.includes(-1)}
+          className="w-full py-3 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          提交答案
+        </button>
+      ) : (
+        <div className="text-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+          <p className="text-lg font-medium text-gray-900 dark:text-white">
+            答对 {correctCount} / {questions.length} 题
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            {correctCount === questions.length ? '🎉 完美！' : correctCount >= questions.length / 2 ? '👍 不错！' : '💪 继续加油！'}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 单词卡片组件
+function VocabularyCards({ words }: { words: any[] }) {
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [showAnswer, setShowAnswer] = useState(false)
+  const [mode, setMode] = useState<'word-to-meaning' | 'meaning-to-word'>('word-to-meaning')
+  const [learned, setLearned] = useState<Set<number>>(new Set())
+
+  const currentWord = words[currentIdx]
+  if (!currentWord) return null
+
+  const handleNext = () => {
+    setShowAnswer(false)
+    setCurrentIdx((prev) => (prev + 1) % words.length)
+  }
+
+  const handlePrev = () => {
+    setShowAnswer(false)
+    setCurrentIdx((prev) => (prev - 1 + words.length) % words.length)
+  }
+
+  const toggleLearned = () => {
+    const newLearned = new Set(learned)
+    if (newLearned.has(currentIdx)) {
+      newLearned.delete(currentIdx)
+    } else {
+      newLearned.add(currentIdx)
+    }
+    setLearned(newLearned)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 模式切换 */}
+      <div className="flex gap-2 justify-center">
+        <button
+          onClick={() => { setMode('word-to-meaning'); setShowAnswer(false); }}
+          className={`px-4 py-2 rounded-lg text-sm ${
+            mode === 'word-to-meaning'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          看单词选释义
+        </button>
+        <button
+          onClick={() => { setMode('meaning-to-word'); setShowAnswer(false); }}
+          className={`px-4 py-2 rounded-lg text-sm ${
+            mode === 'meaning-to-word'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          看释义选单词
+        </button>
+      </div>
+
+      {/* 进度 */}
+      <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+        {currentIdx + 1} / {words.length} | 已掌握: {learned.size}
+      </div>
+
+      {/* 卡片 */}
+      <div
+        onClick={() => setShowAnswer(!showAnswer)}
+        className="relative h-64 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer shadow-lg hover:shadow-xl transition-shadow"
+      >
+        {!showAnswer ? (
+          <>
+            {mode === 'word-to-meaning' ? (
+              <>
+                <p className="text-3xl font-bold text-white mb-2">{currentWord.word}</p>
+                <p className="text-blue-200">{currentWord.phonetic}</p>
+                <p className="text-sm text-blue-200 mt-4">点击查看释义</p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-white text-center mb-2">{currentWord.meaning}</p>
+                <p className="text-sm text-blue-200 mt-4">点击查看单词</p>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {mode === 'word-to-meaning' ? (
+              <>
+                <p className="text-xl font-bold text-white mb-2">{currentWord.meaning}</p>
+                <p className="text-blue-200">{currentWord.pos}</p>
+                <p className="text-sm text-white/80 mt-4 text-center italic">"{currentWord.example}"</p>
+              </>
+            ) : (
+              <>
+                <p className="text-3xl font-bold text-white mb-2">{currentWord.word}</p>
+                <p className="text-blue-200">{currentWord.phonetic}</p>
+                <p className="text-blue-200">{currentWord.pos}</p>
+                <p className="text-sm text-white/80 mt-4 text-center italic">"{currentWord.example}"</p>
+              </>
+            )}
+          </>
+        )}
+
+        {/* 掌握标记 */}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleLearned(); }}
+          className={`absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+            learned.has(currentIdx)
+              ? 'bg-green-500 text-white'
+              : 'bg-white/20 text-white hover:bg-white/30'
+          }`}
+        >
+          ✓
+        </button>
+      </div>
+
+      {/* 导航 */}
+      <div className="flex justify-between">
+        <button
+          onClick={handlePrev}
+          className="px-6 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+        >
+          ← 上一个
+        </button>
+        <button
+          onClick={handleNext}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          下一个 →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// 词汇列表组件
+function VocabularyList({ words }: { words: any[] }) {
+  return (
+    <div className="grid gap-3">
+      {words.map((word, idx) => (
+        <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+          <div className="flex items-start gap-3">
+            <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{word.word}</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">{word.phonetic}</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">{word.pos}</span>
+          </div>
+          <p className="text-gray-800 dark:text-gray-200 mt-1">{word.meaning}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 italic">"{word.example}"</p>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function TaskPage() {
   const params = useParams()
@@ -13,9 +248,7 @@ export default function TaskPage() {
   const [notes, setNotes] = useState('')
   const [duration, setDuration] = useState('')
   const [difficulty, setDifficulty] = useState(3)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [audioProgress, setAudioProgress] = useState(0)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [activeTab, setActiveTab] = useState<'content' | 'cards'>('content')
   const router = useRouter()
   const supabase = createClient()
 
@@ -26,16 +259,12 @@ export default function TaskPage() {
   }, [params.id])
 
   const fetchTask = async (taskId: string) => {
-    console.log('Fetching task with ID:', taskId)
-    
     const { data, error } = await supabase
       .from('daily_tasks')
       .select('*')
       .eq('id', taskId)
       .single()
-    
-    console.log('Task data:', data, 'Error:', error)
-    
+
     if (data) {
       setTask(data)
       if (data.completion_data) {
@@ -47,42 +276,9 @@ export default function TaskPage() {
     setLoading(false)
   }
 
-  const playAudio = async (text: string) => {
-    if (!text) return
-    
-    setIsPlaying(true)
-    
-    try {
-      // 使用 Web Speech API (免费，无需API Key)
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'en-US'
-      utterance.rate = 0.9
-      utterance.pitch = 1
-      
-      utterance.onend = () => {
-        setIsPlaying(false)
-      }
-      
-      utterance.onerror = () => {
-        setIsPlaying(false)
-      }
-      
-      speechSynthesis.speak(utterance)
-    } catch (err) {
-      console.error('Audio playback error:', err)
-      setIsPlaying(false)
-    }
-  }
-
-  const stopAudio = () => {
-    speechSynthesis.cancel()
-    setIsPlaying(false)
-  }
-
   const completeTask = async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    
-    // 更新任务状态
+
     await supabase
       .from('daily_tasks')
       .update({
@@ -96,7 +292,6 @@ export default function TaskPage() {
       })
       .eq('id', params.id)
 
-    // 添加学习记录
     await supabase.from('study_logs').insert({
       user_id: user?.id,
       task_id: params.id,
@@ -125,22 +320,21 @@ export default function TaskPage() {
         <div className="text-center">
           <div className="text-6xl mb-4">😕</div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">任务不存在</h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">该任务可能已被删除或不存在</p>
-          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline">
-            返回首页
-          </Link>
+          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline">返回首页</Link>
         </div>
       </div>
     )
   }
 
   const content = task.content || {}
+  const hasQuiz = content.questions && content.answers
+  const hasVocabCards = task.task_type === 'vocabulary' && content.words
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <header className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">← 返回首页</Link>
+          <Link href="/" className="text-blue-600 dark:text-blue-400">← 返回首页</Link>
           <span className={`px-3 py-1 rounded-full text-sm ${
             task.is_completed
               ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
@@ -152,145 +346,180 @@ export default function TaskPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6">
+        {/* 任务标题 */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-sm capitalize">
               {task.task_type}
             </span>
-            {content.duration && (
-              <span className="text-sm text-gray-500 dark:text-gray-400">预计 {content.duration} 分钟</span>
-            )}
+            <span className="text-sm text-gray-500 dark:text-gray-400">预计 {task.content?.duration || 30} 分钟</span>
           </div>
-
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{content.title || '学习任务'}</h1>
-          
-          <p className="text-gray-700 dark:text-gray-300 mb-6">{content.description}</p>
-
-          {/* 听力任务 - 音频播放功能 */}
-          {task.task_type === 'listening' && content.audio_text && (
-            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-3">🎧 听力练习</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                点击播放按钮听取听力原文
-              </p>
-              <div className="flex items-center gap-3">
-                {isPlaying ? (
-                  <button
-                    onClick={stopAudio}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                  >
-                    <span>⏹</span> 停止
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => playAudio(content.audio_text)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <span>🔊</span> 播放音频
-                  </button>
-                )}
-                <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-500 transition-all duration-300"
-                    style={{ width: `${audioProgress}%` }}
-                  />
-                </div>
-              </div>
-              <details className="mt-4">
-                <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
-                  查看听力原文
-                </summary>
-                <p className="mt-2 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-white dark:bg-gray-800 p-3 rounded-lg">
-                  {content.audio_text}
-                </p>
-              </details>
-            </div>
-          )}
-
-          {content.steps && content.steps.length > 0 && (
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">任务步骤</h3>
-              <ol className="space-y-2">
-                {content.steps.map((step: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center text-sm font-medium">
-                      {idx + 1}
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          <p className="text-gray-700 dark:text-gray-300">{content.description}</p>
         </div>
 
-        {!task.is_completed && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">完成任务</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  实际学习时间（分钟）
-                </label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="例如：45"
-                />
-              </div>
+        {/* 词汇任务 - 标签切换 */}
+        {hasVocabCards && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setActiveTab('content')}
+                className={`px-4 py-2 rounded-lg ${
+                  activeTab === 'content'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                词汇列表
+              </button>
+              <button
+                onClick={() => setActiveTab('cards')}
+                className={`px-4 py-2 rounded-lg ${
+                  activeTab === 'cards'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                🎴 卡片背诵
+              </button>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  难度评分
-                </label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => setDifficulty(star)}
-                      className={`text-2xl ${star <= difficulty ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600'}`}
-                    >
-                      ⭐
-                    </button>
-                  ))}
+            {activeTab === 'content' ? (
+              <VocabularyList words={content.words} />
+            ) : (
+              <VocabularyCards words={content.words} />
+            )}
+          </div>
+        )}
+
+        {/* 阅读/听力任务 - 文章和题目 */}
+        {hasQuiz && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
+            {/* 文章内容 */}
+            {content.passage && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">文章内容</h3>
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {content.passage}
                 </div>
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                  学习笔记
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500"
-                  rows={4}
-                  placeholder="记录今天的学习心得..."
-                />
+            {/* 听力原文 */}
+            {task.task_type === 'listening' && content.audio_text && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">🎧 听力原文</h3>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                  {content.audio_text}
+                </div>
               </div>
+            )}
 
-              <button
-                onClick={completeTask}
-                className="w-full py-4 px-6 bg-green-600 dark:bg-green-700 text-white rounded-lg font-medium hover:bg-green-700 dark:hover:bg-green-800"
-              >
-                标记为已完成
-              </button>
+            {/* 题目 */}
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">练习题</h3>
+              <QuizSection questions={content.questions} answers={content.answers} taskType={task.task_type} />
             </div>
           </div>
         )}
 
-        {task.is_completed && task.completion_data && (
-          <div className="bg-green-50 dark:bg-green-900/30 rounded-2xl p-6">
-            <h3 className="font-semibold text-green-900 dark:text-green-300 mb-4">完成记录</h3>
-            <div className="space-y-2 text-green-800 dark:text-green-300">
-              <div>实际学习时间: {task.completion_data.duration} 分钟</div>
-              <div>难度评分: {'⭐'.repeat(task.completion_data.difficulty || 3)}</div>
-              {task.completion_data.notes && (
-                <div>学习笔记: {task.completion_data.notes}</div>
-              )}
+        {/* 写作任务 */}
+        {task.task_type === 'writing' && content.prompt && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6 space-y-6">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">写作题目</h3>
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+                <p className="text-gray-800 dark:text-gray-200">{content.prompt}</p>
+              </div>
+            </div>
+
+            {content.outline && (
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">写作思路</h3>
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                  {content.outline}
+                </div>
+              </div>
+            )}
+
+            {content.sample && (
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">参考范文</h3>
+                <div className="p-4 bg-green-50 dark:bg-green-900/30 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                  {content.sample}
+                </div>
+              </div>
+            )}
+
+            {content.checklist && (
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">自查清单</h3>
+                <ul className="space-y-2">
+                  {content.checklist.map((item: string, idx: number) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400">☐</span>
+                      <span className="text-gray-700 dark:text-gray-300">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 任务步骤 */}
+        {content.steps && content.steps.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">任务步骤</h3>
+            <ol className="space-y-3">
+              {content.steps.map((step: string, idx: number) => (
+                <li key={idx} className="flex items-start gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center text-sm font-medium">
+                    {idx + 1}
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300 pt-0.5">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {/* 完成任务表单 */}
+        {!task.is_completed && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">完成任务</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">实际学习时间（分钟）</label>
+                <input
+                  type="number"
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg"
+                  placeholder="例如：45"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">难度评分</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button key={star} onClick={() => setDifficulty(star)} className={`text-2xl ${star <= difficulty ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600'}`}>⭐</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">学习笔记</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg"
+                  rows={4}
+                  placeholder="记录今天的学习心得..."
+                />
+              </div>
+              <button onClick={completeTask} className="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700">
+                标记为已完成
+              </button>
             </div>
           </div>
         )}

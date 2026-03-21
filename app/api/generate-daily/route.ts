@@ -17,11 +17,42 @@ export async function POST(request: NextRequest) {
 
     // 根据任务类型生成更具体的内容
     const taskTypePrompts: Record<string, string> = {
-      reading: '阅读理解：提供一篇雅思/托福/四六级阅读文章的标题、来源、字数，以及3-5道选择题让学生练习。题目必须包含：文章正文内容、每道题目的选项和正确答案。',
-      listening: '听力训练：提供一个完整的听力练习场景。必须包含：听力音频文本（用【听力文本】标注）、3-5道听力题目（选择题）和正确答案。',
-      writing: '写作练习：给出一个写作题目，包含题目描述、字数要求、参考范文或写作思路。',
-      vocabulary: '词汇学习：列出10-15个今日应学习的重点词汇，每个词必须包含：单词、音标、词性、中文释义、一个例句。',
-      review: '复习巩固：设计复习内容，包含之前学过的重点知识点回顾、错题整理方法。',
+      reading: `阅读理解任务：
+1. 提供一篇${exam_type?.toUpperCase()}水平的阅读文章（300-500词）
+2. 生成4-5道选择题，每题4个选项
+3. 【重要】正确答案和解析要单独存放，不要直接显示在题目中
+4. 题目格式要求：
+   - passage: 文章正文（要有换行格式）
+   - questions: 题目数组，每个题目包含 question(问题), options(选项数组，不要标注正确答案)
+   - answers: 答案数组，每个包含 correct(正确选项索引0-3), explanation(解析说明)`,
+
+      listening: `听力训练任务：
+1. 提供一段听力原文文本（200-400词）
+2. 生成3-4道听力理解选择题
+3. 【重要】正确答案和解析要单独存放
+4. 题目格式要求：
+   - audio_text: 听力原文
+   - questions: 题目数组
+   - answers: 答案数组`,
+
+      writing: `写作练习任务：
+1. 给出一个写作题目和字数要求
+2. 提供写作思路指导
+3. 提供高分范文（供学习参考）
+4. 提供评分标准和自查清单`,
+
+      vocabulary: `词汇学习任务：
+1. 生成12-15个核心词汇
+2. 每个词汇包含：word(单词), phonetic(音标), pos(词性), meaning(中文释义), example(例句)
+3. 【重要】同时生成卡片模式数据：
+   - cards: 数组，每个卡片用于背诵模式，包含 word 和 meaning
+   - quiz: 小测验题目，看中文选英文，或看英文选中文`,
+
+      review: `复习巩固任务：
+1. 根据之前学习内容设计复习
+2. 包含重点知识点回顾
+3. 设计自我检测题目
+4. 提供错题整理模板`,
     }
 
     const selectedTaskTypes = task_types.map((t: string) => taskTypePrompts[t] || taskTypePrompts.reading).join('\n\n')
@@ -41,20 +72,32 @@ ${selectedTaskTypes}
 
 【重要】每个任务必须包含：
 1. title - 具体可执行的任务标题
-2. description - 具体的任务描述，包含题目或内容
+2. description - 任务简介（1-2句话）
 3. duration - 预计完成时间（分钟）
 4. steps - 具体的执行步骤（3-5步）
-5. audio_text - 【仅听力任务】包含完整的听力原文文本（用于后续生成音频），其他任务留空
+5. content - 【重要】任务的具体内容，根据任务类型有不同的结构：
+   - 阅读/听力任务：包含 passage(文章), questions(题目数组，不含答案), answers(答案和解析数组)
+   - 词汇任务：包含 words(词汇数组), cards(卡片数组), quiz(测验数组)
+   - 写作任务：包含 prompt(题目), outline(思路), sample(范文), checklist(自查清单)
 
-【输出格式】必须是合法的JSON数组。
-例如：
+【输出格式】必须是合法的JSON数组，格式如下：
 [
   {
-    "title": "完成剑雅真题第X篇阅读",
-    "description": "阅读文章并完成题目...",
+    "title": "任务标题",
+    "description": "任务简介",
     "duration": 30,
-    "steps": ["先阅读题目", "快速浏览文章", "定位关键词", "答题", "核对答案"],
-    "audio_text": ""
+    "steps": ["步骤1", "步骤2", "步骤3"],
+    "content": {
+      "passage": "文章正文（阅读/听力任务）",
+      "questions": [
+        {"question": "问题1", "options": ["A选项", "B选项", "C选项", "D选项"]},
+        {"question": "问题2", "options": ["A选项", "B选项", "C选项", "D选项"]}
+      ],
+      "answers": [
+        {"correct": 1, "explanation": "解析说明"},
+        {"correct": 2, "explanation": "解析说明"}
+      ]
+    }
   }
 ]`
 
