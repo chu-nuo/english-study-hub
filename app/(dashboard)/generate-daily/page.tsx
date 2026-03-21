@@ -112,9 +112,24 @@ export default function GenerateDailyPage() {
       const { data: { user } } = await supabase.auth.getUser()
       console.log('Current user:', user?.id)
       
+      if (!user?.id) {
+        throw new Error('用户未登录或会话已过期')
+      }
+      
+      // 先删除今日已有任务（避免唯一约束冲突）
+      const { error: deleteError } = await supabase
+        .from('daily_tasks')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('task_date', today)
+      
+      if (deleteError) {
+        console.error('删除旧任务失败:', deleteError)
+      }
+      
       for (let i = 0; i < tasks.length; i++) {
         const taskData = {
-          user_id: user?.id,
+          user_id: user.id,
           task_date: today,
           task_type: selectedTypes[i] || 'reading',
           content: tasks[i],
@@ -125,8 +140,8 @@ export default function GenerateDailyPage() {
         const { error: insertError } = await supabase.from('daily_tasks').insert(taskData)
         
         if (insertError) {
-          console.error('插入任务失败:', insertError)
-          throw new Error(`保存任务失败: ${insertError.message}`)
+          console.error('插入任务失败:', JSON.stringify(insertError, null, 2))
+          throw new Error(`保存任务失败: ${insertError.message || insertError.code || JSON.stringify(insertError)}`)
         }
       }
 
