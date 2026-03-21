@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
+  console.log('Generate daily API called')
+  
   try {
     const body = await request.json()
+    console.log('Request body:', JSON.stringify(body, null, 2))
     const { exam_type, current_level, target_score, daily_study_time, day_of_week, weekly_focus, task_types } = body
 
     if (!exam_type || !current_level || !target_score || !daily_study_time || !task_types || !Array.isArray(task_types)) {
