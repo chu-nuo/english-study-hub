@@ -30,6 +30,7 @@ create table daily_tasks (
   task_date date not null,
   task_type text check (task_type in ('reading', 'listening', 'writing', 'vocabulary', 'review')),
   content jsonb not null, -- AI生成的具体任务内容
+  audio_text text, -- 听力任务的音频文本（用于TTS生成）
   is_completed boolean default false,
   completion_data jsonb, -- 存储完成时的数据（如写作内容、听力正确率）
   created_at timestamp with time zone default timezone('utc'::text, now()),
