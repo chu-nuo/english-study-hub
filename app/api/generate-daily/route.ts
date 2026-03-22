@@ -99,16 +99,13 @@ tips: |
 4. 写作题目必须具体，范文必须是完整的文章
 5. 词汇必须是真实的单词，有正确的音标和例句
 
-任务类型要求：
+任务类型要求（共 ${task_types.length} 个任务，顺序必须一致）：
 ${selectedTaskTypes}
 
-【输出格式】
-返回合法的JSON数组，每个任务包含：
-- title: 任务标题
-- description: 任务简介  
-- duration: 预计时间(分钟)
-- steps: 执行步骤数组
-- content: 任务具体内容（根据类型不同）
+【输出格式 — 必须严格遵守】
+1. 禁止使用 JSON、禁止使用 Markdown 代码块。使用纯文本。
+2. 按顺序生成 ${task_types.length} 个任务；每两个任务之间必须用单独一行且仅包含：==========
+3. 每个任务必须按上面「任务类型要求」中对应类型的字段书写（含 title:、description:、passage: / audio_text: / prompt: 等），以便学生直接学习。
 
 请确保生成的内容真实可用，学生可以直接开始学习！`
 
@@ -140,26 +137,63 @@ ${selectedTaskTypes}
       }),
     })
 
+    const rawAiBody = await response.text()
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      console.error('SiliconFlow API Error:', response.status, errorData)
+      let detail = response.statusText
+      try {
+        const errJson = JSON.parse(rawAiBody)
+        detail = errJson.error?.message || errJson.message || JSON.stringify(errJson).slice(0, 300)
+      } catch {
+        detail = rawAiBody.slice(0, 400) || detail
+      }
+      console.error('SiliconFlow API Error:', response.status, detail)
       return NextResponse.json(
-        { error: `AI 服务调用失败: ${errorData.error?.message || response.statusText}` },
+        { error: `AI 服务调用失败 (${response.status}): ${detail}` },
         { status: 500 }
       )
     }
 
-    const data = await response.json()
-    const aiContent = data.choices[0].message.content
+    let data: { choices?: { message?: { content?: string } }[] }
+    try {
+      data = JSON.parse(rawAiBody)
+    } catch {
+      return NextResponse.json(
+        { error: 'AI 响应不是合法 JSON' },
+        { status: 500 }
+      )
+    }
 
+    const aiContent = data.choices?.[0]?.message?.content
     console.log('AI response length:', aiContent?.length)
 
-    // 解析AI返回的文本格式，转换为任务对象
-    const tasks = parseTasksFromText(aiContent, task_types)
+    if (!aiContent || typeof aiContent !== 'string') {
+      return NextResponse.json(
+        { error: 'AI 返回内容为空，请稍后重试' },
+        { status: 500 }
+      )
+    }
+
+    // 解析：优先与 task_types 数量对齐（文本分隔 或 JSON 数组）
+    let tasks = parseTasksFromText(aiContent, task_types)
+    if (tasks.length !== task_types.length) {
+      const jsonTasks = tryParseJsonTaskArray(aiContent)
+      if (jsonTasks && jsonTasks.length === task_types.length) {
+        tasks = normalizeJsonTasks(jsonTasks, task_types)
+      }
+    }
 
     if (!Array.isArray(tasks) || tasks.length === 0) {
       return NextResponse.json(
-        { error: '生成的任务格式错误' },
+        { error: '生成的任务格式错误，请减少任务类型数量后重试' },
+        { status: 500 }
+      )
+    }
+
+    if (tasks.length !== task_types.length) {
+      return NextResponse.json(
+        {
+          error: `解析得到 ${tasks.length} 个任务，与请求的 ${task_types.length} 个不一致，请减少同时生成的任务数或重试`,
+        },
         { status: 500 }
       )
     }
@@ -172,6 +206,35 @@ ${selectedTaskTypes}
       { status: 500 }
     )
   }
+}
+
+function tryParseJsonTaskArray(text: string): any[] | null {
+  const s = text.trim()
+  const codeBlock = s.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const jsonStr = (codeBlock ? codeBlock[1] : s).trim()
+  if (!jsonStr.startsWith('[')) return null
+  try {
+    const arr = JSON.parse(jsonStr)
+    return Array.isArray(arr) ? arr : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeJsonTasks(raw: any[], taskTypes: string[]): any[] {
+  return raw.map((item, i) => {
+    const inner =
+      item && typeof item.content === 'object' && item.content !== null && !Array.isArray(item.content)
+        ? item.content
+        : {}
+    return {
+      title: item?.title || `${taskTypes[i] || 'learning'} 任务`,
+      description: item?.description || '',
+      duration: typeof item?.duration === 'number' ? item.duration : 30,
+      steps: Array.isArray(item?.steps) ? item.steps : ['仔细阅读任务要求', '完成学习内容', '检查答案并复习'],
+      content: inner,
+    }
+  })
 }
 
 // 解析AI返回的文本为任务对象
