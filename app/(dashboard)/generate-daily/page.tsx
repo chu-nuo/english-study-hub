@@ -19,6 +19,7 @@ export default function GenerateDailyPage() {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [infoMessage, setInfoMessage] = useState('')
   const router = useRouter()
   const supabase = createClient()
 
@@ -73,40 +74,53 @@ export default function GenerateDailyPage() {
 
     setLoading(true)
     setMessage('')
+    setInfoMessage('')
 
     try {
       const today = new Date().toISOString().split('T')[0]
       const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
       const weeklyPlan = strategy.strategy_json?.weekly_structure?.[dayOfWeek]
 
-      // 调用后端 API 生成任务
-      const response = await fetch('/api/generate-daily', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          exam_type: profile.exam_type,
-          current_level: profile.current_level,
-          target_score: profile.target_score,
-          daily_study_time: profile.daily_study_time,
-          day_of_week: dayOfWeek,
-          weekly_focus: weeklyPlan?.focus || '综合训练',
-          task_types: selectedTypes,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `API 调用失败: ${response.status}`)
+      const bodyBase = {
+        exam_type: profile.exam_type,
+        current_level: profile.current_level,
+        target_score: profile.target_score,
+        daily_study_time: profile.daily_study_time,
+        day_of_week: dayOfWeek,
+        weekly_focus: weeklyPlan?.focus || '综合训练',
       }
 
-      const data = await response.json()
-      const tasks = data.tasks
+      // 每种任务单独请求，避免单次 Serverless 超时（Vercel 免费版约 10s 上限）
+      const tasks: any[] = []
+      for (let i = 0; i < selectedTypes.length; i++) {
+        const type = selectedTypes[i]
+        const label = taskTypes.find((t) => t.value === type)?.label || type
+        setInfoMessage(`正在生成 ${i + 1}/${selectedTypes.length}：${label}…`)
 
-      if (!Array.isArray(tasks) || tasks.length === 0) {
-        throw new Error('生成的任务格式错误')
+        const response = await fetch('/api/generate-daily', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...bodyBase,
+            task_types: [type],
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `「${label}」API 调用失败: ${response.status}`)
+        }
+
+        const data = await response.json()
+        if (!Array.isArray(data.tasks) || data.tasks.length === 0) {
+          throw new Error(`「${label}」生成结果为空`)
+        }
+        tasks.push(data.tasks[0])
       }
+
+      setInfoMessage('')
 
       // 保存任务到数据库
       const { data: { user } } = await supabase.auth.getUser()
@@ -157,6 +171,7 @@ export default function GenerateDailyPage() {
       console.log('All tasks inserted successfully, redirecting...')
       router.push('/')
     } catch (err: any) {
+      setInfoMessage('')
       setMessage('生成任务失败: ' + (err.message || '请稍后重试'))
     } finally {
       setLoading(false)
@@ -224,6 +239,12 @@ export default function GenerateDailyPage() {
             </div>
           </div>
 
+          {infoMessage && (
+            <div className="text-sm text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg">
+              {infoMessage}
+            </div>
+          )}
+
           {message && (
             <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-3 rounded-lg">{message}</div>
           )}
@@ -233,7 +254,7 @@ export default function GenerateDailyPage() {
             disabled={loading || initialLoading || selectedTypes.length === 0 || !profile || !strategy}
             className="w-full py-4 px-6 bg-blue-600 dark:bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {initialLoading ? '加载中...' : loading ? 'AI 正在生成任务...' : `生成 ${selectedTypes.length} 个任务`}
+            {initialLoading ? '加载中...' : loading ? `生成中（${selectedTypes.length} 次请求）…` : `生成 ${selectedTypes.length} 个任务`}
           </button>
         </div>
       </div>

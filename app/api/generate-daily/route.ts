@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 title: 阅读理解：[文章主题]
 description: 阅读以下文章并完成理解题目
 passage: |
-  [在这里写完整的英文文章，300-500词，主题可以是科技、环境、教育、健康等]
+  [在这里写完整的英文文章，约200-350词即可，主题可以是科技、环境、教育、健康等]
 questions:
 1. [问题1]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
 2. [问题2]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
@@ -36,7 +36,7 @@ questions:
 title: 听力训练：[场景主题]
 description: 听以下对话/独白并回答问题
 audio_text: |
-  [在这里写完整的听力原文，对话或独白形式，200-400词]
+  [在这里写完整的听力原文，对话或独白形式，约150-300词]
 questions:
 1. [问题1]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
 2. [问题2]? A) [选项] B) [选项] C) [选项] D) [选项] 答案:[A/B/C/D] 解析:[为什么]
@@ -83,6 +83,7 @@ tips: |
     }
 
     const selectedTaskTypes = task_types.map((t: string) => getSimpleTaskPrompt(t)).join('\n\n==========\n\n')
+    const singleTask = task_types.length === 1
 
     const prompt = `你是专业的英语教育内容生成专家。请为用户生成今日具体、完整、可直接使用的学习任务。
 
@@ -95,7 +96,7 @@ tips: |
 【重要要求】
 1. 必须生成真实、完整、可直接学习的内容
 2. 不能生成placeholder或示例框架
-3. 阅读文章必须是完整的、有实际内容的文章
+3. 阅读文章必须是完整的、有实际内容的文章（篇幅精炼，避免无谓冗长）
 4. 写作题目必须具体，范文必须是完整的文章
 5. 词汇必须是真实的单词，有正确的音标和例句
 
@@ -104,7 +105,7 @@ ${selectedTaskTypes}
 
 【输出格式 — 必须严格遵守】
 1. 禁止使用 JSON、禁止使用 Markdown 代码块。使用纯文本。
-2. 按顺序生成 ${task_types.length} 个任务；每两个任务之间必须用单独一行且仅包含：==========
+2. ${singleTask ? '只生成 1 个任务，不要输出 ========== 分隔行。' : `按顺序生成 ${task_types.length} 个任务；每两个任务之间必须用单独一行且仅包含：==========`}
 3. 每个任务必须按上面「任务类型要求」中对应类型的字段书写（含 title:、description:、passage: / audio_text: / prompt: 等），以便学生直接学习。
 
 请确保生成的内容真实可用，学生可以直接开始学习！`
@@ -133,7 +134,8 @@ ${selectedTaskTypes}
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 4000,
+        // 单次请求任务越少越不易触发 Vercel 10s 限制；单任务时控制输出上限以加快返回
+        max_tokens: singleTask ? 3072 : Math.min(8192, 2500 + task_types.length * 1200),
       }),
     })
 
