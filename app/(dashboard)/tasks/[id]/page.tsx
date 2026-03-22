@@ -326,7 +326,19 @@ export default function TaskPage() {
     )
   }
 
-  const content = task.content || {}
+  // 兼容旧数据：曾把整个任务对象塞进 content，正文在 content.content 下
+  const rawContent = (task.content || {}) as any
+  let content: any
+  if (
+    rawContent.content &&
+    typeof rawContent.content === 'object' &&
+    !Array.isArray(rawContent.content)
+  ) {
+    const { content: inner, ...rest } = rawContent
+    content = { ...rest, ...inner }
+  } else {
+    content = rawContent
+  }
   const hasQuiz = content.questions && content.questions.length > 0
   const hasPassage = content.passage && content.passage.length > 0
   const hasAudioText = content.audio_text && content.audio_text.length > 0

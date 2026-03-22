@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Vercel Serverless：默认约 10s 可能不够完成 SiliconFlow 长文本生成，按需提高上限（需在 Dashboard 中允许更长执行时间）
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   console.log('Generate daily API called')
   
@@ -80,25 +83,6 @@ tips: |
     }
 
     const selectedTaskTypes = task_types.map((t: string) => getSimpleTaskPrompt(t)).join('\n\n==========\n\n')
-
-    const prompt = `请为${exam_type?.toUpperCase()}考生生成${task_types.length}个学习任务。
-
-考生信息：
-- 当前水平：${current_level}
-- 目标分数：${target_score}
-- 每日学习时间：${daily_study_time}分钟
-
-【非常重要】
-1. 必须生成真实、完整、可直接学习的内容
-2. 不要生成placeholder或示例说明
-3. 阅读文章必须是完整的真实文章
-4. 写作题目必须具体，范文必须是完整的文章
-5. 词汇必须是真实单词，有正确音标和例句
-
-任务类型：
-${selectedTaskTypes}
-
-请按照上述格式生成内容，确保学生可以直接开始学习。内容要充实、有实际价值。`
 
     const prompt = `你是专业的英语教育内容生成专家。请为用户生成今日具体、完整、可直接使用的学习任务。
 

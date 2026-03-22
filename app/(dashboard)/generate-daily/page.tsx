@@ -128,12 +128,21 @@ export default function GenerateDailyPage() {
       }
       
       for (let i = 0; i < tasks.length; i++) {
+        const t = tasks[i]
+        // 与任务详情页约定一致：content 为单层 JSON，含 title/steps 与 passage、questions 等并列字段
+        const content = {
+          title: t.title,
+          description: t.description,
+          duration: t.duration,
+          steps: t.steps,
+          ...(t.content && typeof t.content === 'object' ? t.content : {}),
+        }
         const taskData = {
           user_id: user.id,
           task_date: today,
           task_type: selectedTypes[i] || 'reading',
-          content: tasks[i],
-          audio_text: tasks[i].audio_text || null,
+          content,
+          audio_text: t.audio_text ?? (t.content && typeof t.content === 'object' ? (t.content as any).audio_text : null) ?? null,
         }
         console.log('Inserting task:', JSON.stringify(taskData, null, 2))
         
