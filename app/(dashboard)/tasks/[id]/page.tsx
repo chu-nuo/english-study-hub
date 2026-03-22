@@ -6,6 +6,65 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+/** 浏览器 TTS 朗读听力原文（英语） */
+function ListeningTTS({ text }: { text: string }) {
+  const [playing, setPlaying] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined') window.speechSynthesis.cancel()
+    }
+  }, [text])
+
+  useEffect(() => {
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null
+    if (!synth) return
+    const warm = () => synth.getVoices()
+    synth.addEventListener('voiceschanged', warm)
+    warm()
+    return () => synth.removeEventListener('voiceschanged', warm)
+  }, [])
+
+  const speak = () => {
+    if (typeof window === 'undefined' || !text?.trim()) return
+    const synth = window.speechSynthesis
+    synth.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'en-US'
+    u.rate = 0.9
+    const voices = synth.getVoices()
+    const v =
+      voices.find((x) => /en[-_]US/i.test(x.lang)) ||
+      voices.find((x) => x.lang.startsWith('en'))
+    if (v) u.voice = v
+    u.onend = () => setPlaying(false)
+    u.onerror = () => setPlaying(false)
+    synth.speak(u)
+    setPlaying(true)
+  }
+
+  const stop = () => {
+    if (typeof window === 'undefined') return
+    window.speechSynthesis.cancel()
+    setPlaying(false)
+  }
+
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={playing ? stop : speak}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium shadow-sm"
+      >
+        {playing ? '⏹ 停止' : '▶ 播放原文'}
+      </button>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+        使用本机浏览器语音朗读（英语）。若无声请先点击一次以触发播放，或在系统设置中检查语音包。
+      </p>
+    </div>
+  )
+}
+
 // 阅读/听力题目组件
 function QuizSection({ questions, answers, taskType }: { questions: any[], answers: any[], taskType: string }) {
   const [userAnswers, setUserAnswers] = useState<number[]>(new Array(questions.length).fill(-1))
@@ -41,20 +100,21 @@ function QuizSection({ questions, answers, taskType }: { questions: any[], answe
               return (
                 <button
                   key={optIdx}
+                  type="button"
                   onClick={() => handleSelect(idx, optIdx)}
                   disabled={showResults}
-                  className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                  className={`w-full text-left p-3 rounded-lg border-2 transition-all text-gray-900 dark:text-gray-100 ${
                     showCorrect
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/30'
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-gray-900 dark:text-gray-100'
                       : showWrong
-                      ? 'border-red-500 bg-red-50 dark:bg-red-900/30'
+                      ? 'border-red-500 bg-red-50 dark:bg-red-900/30 text-gray-900 dark:text-gray-100'
                       : isSelected
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-gray-900 dark:text-gray-100'
+                      : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                   }`}
                 >
-                  <span className="font-medium mr-2">{String.fromCharCode(65 + optIdx)}.</span>
-                  {option}
+                  <span className="font-medium mr-2 text-gray-800 dark:text-gray-200">{String.fromCharCode(65 + optIdx)}.</span>
+                  <span className="text-gray-900 dark:text-gray-100">{option}</span>
                 </button>
               )
             })}
@@ -433,6 +493,9 @@ export default function TaskPage() {
             {hasAudioText && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">🎧 听力原文</h3>
+                {task.task_type === 'listening' && typeof content.audio_text === 'string' && (
+                  <ListeningTTS text={content.audio_text} />
+                )}
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl whitespace-pre-wrap text-gray-700 dark:text-gray-300">
                   {content.audio_text}
                 </div>

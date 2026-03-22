@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { inferTaskTypesFromWeeklyPlan, getWeekdayKey } from '@/lib/strategy-task-types'
 
 const taskTypes = [
   { value: 'reading', label: '阅读理解' },
@@ -20,12 +21,32 @@ export default function GenerateDailyPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [infoMessage, setInfoMessage] = useState('')
+  const [recommendationHint, setRecommendationHint] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!strategy) return
+    const weekly =
+      strategy.strategy_json?.weekly_structure ?? strategy.weekly_structure
+    if (!weekly || typeof weekly !== 'object') return
+    const day = getWeekdayKey()
+    const plan = weekly[day] as { focus?: string; task_type?: string } | undefined
+    const inferred = inferTaskTypesFromWeeklyPlan(plan)
+    setSelectedTypes(inferred)
+    const dayZh = new Date().toLocaleDateString('zh-CN', { weekday: 'long' })
+    if (plan) {
+      setRecommendationHint(
+        `根据学习策略，${dayZh} 重点：${plan.focus || '综合训练'}（${plan.task_type || ''}）。已为你勾选推荐题型，仍可自行调整。`
+      )
+    } else {
+      setRecommendationHint(null)
+    }
+  }, [strategy])
 
   const fetchData = async () => {
     setInitialLoading(true)
@@ -129,18 +150,7 @@ export default function GenerateDailyPage() {
       if (!user?.id) {
         throw new Error('用户未登录或会话已过期')
       }
-      
-      // 先删除今日已有任务（避免唯一约束冲突）
-      const { error: deleteError } = await supabase
-        .from('daily_tasks')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('task_date', today)
-      
-      if (deleteError) {
-        console.error('删除旧任务失败:', deleteError)
-      }
-      
+
       for (let i = 0; i < tasks.length; i++) {
         const t = tasks[i]
         // 与任务详情页约定一致：content 为单层 JSON，含 title/steps 与 passage、questions 等并列字段
@@ -210,6 +220,12 @@ export default function GenerateDailyPage() {
           {!strategy && (
             <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg">
               请先<a href="/generate-strategy" className="underline font-medium">生成学习策略</a>
+            </div>
+          )}
+
+          {recommendationHint && (
+            <div className="text-sm text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg border border-emerald-200/60 dark:border-emerald-800/60">
+              {recommendationHint}
             </div>
           )}
 

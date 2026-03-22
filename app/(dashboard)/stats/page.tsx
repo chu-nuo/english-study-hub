@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ThemeToggle from '../../ThemeToggle'
+import CompletedTasksSection from './CompletedTasksSection'
 
 export default async function StatsPage() {
   const supabase = await createClient()
@@ -11,7 +12,6 @@ export default async function StatsPage() {
     redirect('/login')
   }
 
-  // 获取学习统计
   const { data: tasks } = await supabase
     .from('daily_tasks')
     .select('*')
@@ -65,6 +65,15 @@ export default async function StatsPage() {
           <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             {totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}% 完成
           </div>
+        </div>
+
+        {/* 已完成任务（原「历史任务」按完成状态归档） */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm mb-6">
+          <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">已完成任务</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            按日期查看你已完成的任务；原顶部「历史任务」入口已合并至此。
+          </p>
+          <CompletedTasksSection tasks={tasks || []} />
         </div>
 
         {/* 最近学习记录 */}

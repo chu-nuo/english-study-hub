@@ -33,9 +33,8 @@ create table daily_tasks (
   audio_text text, -- 听力任务的音频文本（用于TTS生成）
   is_completed boolean default false,
   completion_data jsonb, -- 存储完成时的数据（如写作内容、听力正确率）
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  unique(user_id, task_date, task_type) -- 每天每类任务唯一
-);
+  created_at timestamp with time zone default timezone('utc'::text, now())
+); -- 同一天同一类型可多条（多次生成共存），见 migrations
 
 -- 学习记录表（详细记录）
 create table study_logs (

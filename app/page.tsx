@@ -51,8 +51,8 @@ export default async function HomePage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">今日学习</h1>
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <Link href="/history" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-              历史任务
+            <Link href="/stats" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+              学习统计
             </Link>
             <Link href="/strategy" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
               我的策略
