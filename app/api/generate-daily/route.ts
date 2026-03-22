@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  parseMcqQuestions,
+  parseVocabularyWords,
+  extractReadingPassage,
+  extractListeningScript,
+  extractMcqSource,
+} from '@/lib/ai-task-parsers'
 
 // Vercel Serverless：默认约 10s 可能不够完成 SiliconFlow 长文本生成，按需提高上限（需在 Dashboard 中允许更长执行时间）
 export const maxDuration = 60
@@ -293,58 +300,32 @@ function parseTaskSection(text: string, type: string): any | null {
 }
 
 function parseReadingTask(text: string, baseTask: any): any {
-  // 提取文章
-  const passageMatch = text.match(/passage:\s*\|?\s*\n?([\s\S]*?)(?=questions:|$)/i)
-  const passage = passageMatch ? passageMatch[1].trim() : ''
-
-  // 提取题目
-  const questions: any[] = []
-  const answers: any[] = []
-
-  const questionMatches = text.matchAll(/(\d+)\.\s*([^?]+)\?\s*A\)\s*([^B]+)B\)\s*([^C]+)C\)\s*([^D]+)D\)\s*([^\n]+?)\s*答案:([A-D])\s*解析:([^\n]+)/gi)
-
-  for (const match of questionMatches) {
-    const correctMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
-    questions.push({
-      question: match[2].trim(),
-      options: [match[3].trim(), match[4].trim(), match[5].trim(), match[6].trim()]
-    })
-    answers.push({
-      correct: correctMap[match[7].toUpperCase()] || 0,
-      explanation: match[8].trim()
-    })
+  let passage = extractReadingPassage(text)
+  if (!passage) {
+    const fb = text.match(/passage:\s*\|?\s*\n?([\s\S]*?)(?=questions?:|$)/i)
+    passage = fb ? fb[1].trim() : ''
   }
+
+  const { questions, answers } = parseMcqQuestions(extractMcqSource(text))
 
   return {
     ...baseTask,
-    content: { passage, questions, answers }
+    content: { passage, questions, answers },
   }
 }
 
 function parseListeningTask(text: string, baseTask: any): any {
-  const audioMatch = text.match(/audio_text:\s*\|?\s*\n?([\s\S]*?)(?=questions:|$)/i)
-  const audio_text = audioMatch ? audioMatch[1].trim() : ''
-
-  const questions: any[] = []
-  const answers: any[] = []
-
-  const questionMatches = text.matchAll(/(\d+)\.\s*([^?]+)\?\s*A\)\s*([^B]+)B\)\s*([^C]+)C\)\s*([^D]+)D\)\s*([^\n]+?)\s*答案:([A-D])\s*解析:([^\n]+)/gi)
-
-  for (const match of questionMatches) {
-    const correctMap: Record<string, number> = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
-    questions.push({
-      question: match[2].trim(),
-      options: [match[3].trim(), match[4].trim(), match[5].trim(), match[6].trim()]
-    })
-    answers.push({
-      correct: correctMap[match[7].toUpperCase()] || 0,
-      explanation: match[8].trim()
-    })
+  let audio_text = extractListeningScript(text)
+  if (!audio_text) {
+    const fb = text.match(/audio_text:\s*\|?\s*\n?([\s\S]*?)(?=questions?:|$)/i)
+    audio_text = fb ? fb[1].trim() : ''
   }
+
+  const { questions, answers } = parseMcqQuestions(extractMcqSource(text))
 
   return {
     ...baseTask,
-    content: { audio_text, questions, answers }
+    content: { audio_text, questions, answers },
   }
 }
 
@@ -376,23 +357,25 @@ function parseWritingTask(text: string, baseTask: any): any {
 }
 
 function parseVocabularyTask(text: string, baseTask: any): any {
-  const words: any[] = []
-
-  const wordMatches = text.matchAll(/(\d+)\.\s*(\w+)\s+([\/\[\]ˈˌaɪeəʊɔuæɑɒɛɜŋθðʃʒ\.]+)\s+(\w+\.?)\s+([^例]+?)\s*例句[:：]\s*(.+)/gi)
-
-  for (const match of wordMatches) {
-    words.push({
-      word: match[2].trim(),
-      phonetic: match[3].trim(),
-      pos: match[4].trim(),
-      meaning: match[5].trim(),
-      example: match[6].trim()
-    })
+  let words = parseVocabularyWords(text)
+  if (words.length === 0) {
+    const wordMatches = text.matchAll(
+      /(\d+)\.\s*([A-Za-z][A-Za-z\-']*)\s+([\/\[\]ˈˌaɪeəʊɔuæɑɒɛɜŋθðʃʒ\.\-\s]+?)\s+(\w+\.?)\s+([^例\n]+?)\s*例句[:：]\s*(.+)/gi
+    )
+    for (const match of wordMatches) {
+      words.push({
+        word: match[2].trim(),
+        phonetic: match[3].trim(),
+        pos: match[4].trim(),
+        meaning: match[5].trim(),
+        example: match[6].trim(),
+      })
+    }
   }
 
   return {
     ...baseTask,
-    content: { words }
+    content: { words },
   }
 }
 

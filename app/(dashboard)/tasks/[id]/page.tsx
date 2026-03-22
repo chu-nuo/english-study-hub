@@ -246,6 +246,7 @@ export default function TaskPage() {
   const [task, setTask] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [notes, setNotes] = useState('')
+  const [writingDraft, setWritingDraft] = useState('')
   const [duration, setDuration] = useState('')
   const [difficulty, setDifficulty] = useState(3)
   const [activeTab, setActiveTab] = useState<'content' | 'cards'>('content')
@@ -269,6 +270,7 @@ export default function TaskPage() {
       setTask(data)
       if (data.completion_data) {
         setNotes(data.completion_data.notes || '')
+        setWritingDraft(data.completion_data.writing_draft || '')
         setDuration(data.completion_data.duration || '')
         setDifficulty(data.completion_data.difficulty || 3)
       }
@@ -288,6 +290,7 @@ export default function TaskPage() {
           duration: parseInt(duration) || 0,
           difficulty,
           completed_at: new Date().toISOString(),
+          ...(task.task_type === 'writing' ? { writing_draft: writingDraft } : {}),
         },
       })
       .eq('id', params.id)
@@ -373,6 +376,12 @@ export default function TaskPage() {
           <p className="text-gray-700 dark:text-gray-300">{content.description}</p>
         </div>
 
+        {task.task_type === 'vocabulary' && (!content.words || content.words.length === 0) && (
+          <div className="bg-amber-50 dark:bg-amber-900/30 rounded-2xl p-4 mb-6 text-sm text-amber-800 dark:text-amber-200">
+            未解析到词汇列表。请删除今日任务后重新「AI 生成」；若仍为空，请检查模型输出是否包含「words:」与「例句」行。
+          </div>
+        )}
+
         {/* 词汇任务 - 标签切换 */}
         {hasVocabCards && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-6">
@@ -437,6 +446,12 @@ export default function TaskPage() {
                 <QuizSection questions={content.questions} answers={content.answers || []} taskType={task.task_type} />
               </div>
             )}
+
+            {(hasPassage || hasAudioText) && !hasQuiz && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded-lg p-3">
+                当前未解析到选择题。请删除今日任务后重新「AI 生成」，新版本会正确保存题目。
+              </p>
+            )}
           </div>
         )}
 
@@ -484,6 +499,26 @@ export default function TaskPage() {
                 </ul>
               </div>
             )}
+
+            {task.task_type === 'writing' && (
+              <div>
+                <label htmlFor="writing-draft" className="block font-semibold text-gray-900 dark:text-white mb-3">
+                  写作区
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  在此撰写作文；内容会随「标记为已完成」一并保存，可随时回来修改。
+                </p>
+                <textarea
+                  id="writing-draft"
+                  name="writing_draft"
+                  value={writingDraft}
+                  onChange={(e) => setWritingDraft(e.target.value)}
+                  spellCheck
+                  className="w-full min-h-[min(28rem,55vh)] px-4 py-4 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl text-base leading-relaxed shadow-inner focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-y"
+                  placeholder="Type your essay here..."
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -510,8 +545,12 @@ export default function TaskPage() {
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">完成任务</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">实际学习时间（分钟）</label>
+                <label htmlFor="task-duration" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  实际学习时间（分钟）
+                </label>
                 <input
+                  id="task-duration"
+                  name="duration_minutes"
                   type="number"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
@@ -528,8 +567,12 @@ export default function TaskPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">学习笔记</label>
+                <label htmlFor="task-notes" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  学习笔记
+                </label>
                 <textarea
+                  id="task-notes"
+                  name="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg"
